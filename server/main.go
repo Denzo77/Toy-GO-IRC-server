@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
-	"strings"
+	// "strconv"
+	// "strings"
 	// "time"
 )
 
@@ -43,6 +43,8 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	fmt.Print(".")
+	state := irc_newConnection(conn.LocalAddr().String(), conn.RemoteAddr().String())
+
 	for {
 		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
@@ -50,21 +52,13 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		temp := strings.TrimSpace(string(netData))
-		if temp == "STOP" {
-			break
-		}
-		fmt.Println(temp)
-		counter := strconv.Itoa(count) + "\n"
-		conn.Write([]byte(string(counter)))
+		response := irc_handleMessage(&state, netData)
+
+		conn.Write([]byte(response))
 		// fmt.Print("-> ", string(netData))
 		// t := time.Now()
 		// myTime := t.Format(time.RFC3339) + "\n"
-		// c.Write([]byte(myTime))
 	}
-	conn.Close()
-}
 
-func handleIrcConnection() {
-
+	// conn.Close()
 }
