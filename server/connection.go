@@ -42,8 +42,23 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		return fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)
 	}
 
+	// Check with server
+	resultChan := make(chan int)
+	server.commandChan <- Command{NICK, params[0], make([]string, 0), resultChan}
+	result := <-resultChan
+	if result != OK {
+		switch result {
+		case ERR_NICKNAMEINUSE:
+			return fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])
+		default:
+			// TODO:
+			return ""
+		}
+	}
+
 	state.nick = params[0]
 
+	// Fix this logic
 	if len(state.user) > 0 && !state.registered {
 		state.registered = true
 		return rplWelcome(server.name, state.nick, state.user, state.host)

@@ -62,6 +62,7 @@ func TestNickErrors(t *testing.T) {
 	testServer := func() (ServerInfo, connectionState) {
 		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
+		handleIrcMessage(&server, &state, "NICK guest")
 		return server, state
 	}
 
