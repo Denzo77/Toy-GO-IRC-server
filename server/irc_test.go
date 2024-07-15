@@ -40,3 +40,30 @@ func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
 		assert.Equal(t, expected, irc_handleMessage(&state, nick))
 	})
 }
+
+func TestNickErrors(t *testing.T) {
+	var tests = []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"ERR_NONICKNAMEGIVEN", "NICK", ":bar.example.com 431 :No nickname given\r\n"},
+		// {"ERR_ERRONEUSNICKNAME", "NICK", ":bar.example.com 432 :<nick> : Erroneus nickname\r\n"},
+		{"ERR_NICKNAMEINUSE", "NICK guest", ":bar.example.com 433 guest :Nickname is already in use\r\n"},
+		// {"ERR_NICKCOLLISION", "NICK", ":bar.example.com 436 guest :Nickname collision KILL from <user>@<host>\r\n"},
+		// {"ERR_UNAVAILABLERESOURCE", "NICK", ":bar.example.com 437 guest :Nick/channel is temporarily unavailable\r\n"},
+		// {"ERR_RESTRICTED", "NICK", ":bar.example.com 484 :Your connection is restricted!\r\n"},
+	}
+
+	testServer := func() IrcState {
+		state := irc_newConnection("bar.example.com", "foo.example.com")
+		return state
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testServer()
+			assert.Equal(t, tt.expected, irc_handleMessage(&state, tt.input))
+		})
+	}
+}

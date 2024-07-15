@@ -40,6 +40,10 @@ var ircCommands = map[string](func(*IrcState, []string) string){
 }
 
 func irc_nick(state *IrcState, params []string) (response string) {
+	if len(params) < 1 {
+		return fmt.Sprintf(":%v 431 :No nickname given\r\n", state.server)
+	}
+
 	state.nick = params[0]
 
 	if len(state.user) > 0 && !state.registered {
