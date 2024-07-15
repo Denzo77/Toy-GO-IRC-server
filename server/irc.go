@@ -5,67 +5,69 @@ import (
 	"strings"
 )
 
-type IrcState struct {
-	server     string
+type connectionState struct {
 	nick       string
 	user       string
 	host       string
 	registered bool
 }
 
-func irc_newConnection(server string, host string) IrcState {
-	return IrcState{
-		server: server,
-		host:   host,
+type serverInfo struct {
+	name string
+}
+
+func newIrcConnection(host string) connectionState {
+	return connectionState{
+		host: host,
 	}
 }
 
-func irc_handleMessage(state *IrcState, message string) string {
+func handleIrcMessage(server *serverInfo, state *connectionState, message string) string {
 	// tokens := irc_tokenize(message)
-	command, params := irc_tokenize(message)
+	command, params := tokenize(message)
 
 	handler, valid_command := ircCommands[command]
 	if !valid_command {
-		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", state.server, command)
+		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)
 	}
 
-	return handler(state, params)
+	return handler(server, state, params)
 }
 
 // Commands
 // Dispatch table
-var ircCommands = map[string](func(*IrcState, []string) string){
-	"NICK": irc_nick,
-	"USER": irc_user,
+var ircCommands = map[string](func(*serverInfo, *connectionState, []string) string){
+	"NICK": handleNick,
+	"USER": handleUser,
 }
 
-func irc_nick(state *IrcState, params []string) (response string) {
+func handleNick(server *serverInfo, state *connectionState, params []string) (response string) {
 	if len(params) < 1 {
-		return fmt.Sprintf(":%v 431 :No nickname given\r\n", state.server)
+		return fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)
 	}
 
 	state.nick = params[0]
 
 	if len(state.user) > 0 && !state.registered {
 		state.registered = true
-		return irc_rplWelcome(state.server, state.nick, state.user, state.host)
+		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
 	return ""
 }
-func irc_user(state *IrcState, params []string) (response string) {
+func handleUser(server *serverInfo, state *connectionState, params []string) (response string) {
 	state.user = params[0]
 
 	if len(state.nick) > 0 && !state.registered {
 		state.registered = true
-		return irc_rplWelcome(state.server, state.nick, state.user, state.host)
+		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
 	return ""
 }
 
 // utility functions
-func irc_tokenize(message string) (command string, params []string) {
+func tokenize(message string) (command string, params []string) {
 	message, _ = strings.CutSuffix(message, "\r\n")
 
 	// params are a space delimited list of up to 14 parameters
@@ -80,7 +82,7 @@ func irc_tokenize(message string) (command string, params []string) {
 	return tokens[0], tokens[1:]
 }
 
-func irc_rplWelcome(server string, nick string, user string, host string) string {
+func rplWelcome(server string, nick string, user string, host string) string {
 	const rplWelcomeFormat = ":%v 001 %v :Welcome to the Internet Relay Network %v!%v@%v\r\n"
 	return fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host)
 }

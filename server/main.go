@@ -27,6 +27,10 @@ func main() {
 	}
 	defer l.Close()
 
+	server := serverInfo{
+		l.Addr().String(),
+	}
+
 	for {
 		// blocks until a new connection comes in
 		c, err := l.Accept()
@@ -36,14 +40,14 @@ func main() {
 		}
 
 		// launch coroutine for handling the new connection
-		go handleConnection(c)
+		go handleConnection(c, &server)
 		count++
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, server *serverInfo) {
 	fmt.Print(".")
-	state := irc_newConnection(conn.LocalAddr().String(), conn.RemoteAddr().String())
+	state := newIrcConnection(conn.RemoteAddr().String())
 
 	for {
 		netData, err := bufio.NewReader(conn).ReadString('\n')
@@ -52,7 +56,7 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		response := irc_handleMessage(&state, netData)
+		response := handleIrcMessage(server, &state, netData)
 
 		conn.Write([]byte(response))
 		// fmt.Print("-> ", string(netData))
