@@ -12,17 +12,13 @@ type connectionState struct {
 	registered bool
 }
 
-type serverInfo struct {
-	name string
-}
-
 func newIrcConnection(host string) connectionState {
 	return connectionState{
 		host: host,
 	}
 }
 
-func handleIrcMessage(server *serverInfo, state *connectionState, message string) string {
+func handleIrcMessage(server *ServerInfo, state *connectionState, message string) string {
 	// tokens := irc_tokenize(message)
 	command, params := tokenize(message)
 
@@ -36,12 +32,12 @@ func handleIrcMessage(server *serverInfo, state *connectionState, message string
 
 // Commands
 // Dispatch table
-var ircCommands = map[string](func(*serverInfo, *connectionState, []string) string){
+var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) string){
 	"NICK": handleNick,
 	"USER": handleUser,
 }
 
-func handleNick(server *serverInfo, state *connectionState, params []string) (response string) {
+func handleNick(server *ServerInfo, state *connectionState, params []string) (response string) {
 	if len(params) < 1 {
 		return fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)
 	}
@@ -55,7 +51,7 @@ func handleNick(server *serverInfo, state *connectionState, params []string) (re
 
 	return ""
 }
-func handleUser(server *serverInfo, state *connectionState, params []string) (response string) {
+func handleUser(server *ServerInfo, state *connectionState, params []string) (response string) {
 	state.user = params[0]
 
 	if len(state.nick) > 0 && !state.registered {

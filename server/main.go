@@ -27,9 +27,7 @@ func main() {
 	}
 	defer l.Close()
 
-	server := serverInfo{
-		l.Addr().String(),
-	}
+	server := MakeServer(l.Addr().String())
 
 	for {
 		// blocks until a new connection comes in
@@ -45,7 +43,7 @@ func main() {
 	}
 }
 
-func handleConnection(conn net.Conn, server *serverInfo) {
+func handleConnection(conn net.Conn, server *ServerInfo) {
 	fmt.Print(".")
 	state := newIrcConnection(conn.RemoteAddr().String())
 

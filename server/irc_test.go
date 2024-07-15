@@ -13,7 +13,8 @@ func TestAssert(t *testing.T) {
 func TestUnknownCommandRespondsWithError(t *testing.T) {
 	expected := ":bar.example.com 421 FOO :Unknown command\r\n"
 
-	server := serverInfo{"bar.example.com"}
+	server := MakeServer("bar.example.com")
+
 	state := newIrcConnection("foo.example.com")
 	assert.Equal(t, expected, handleIrcMessage(&server, &state, "FOO this fails\r\n"))
 }
@@ -30,14 +31,14 @@ func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
 	expected := ":bar.example.com 001 nick :Welcome to the Internet Relay Network nick!user@foo.example.com\r\n"
 
 	t.Run("NICK then USER", func(t *testing.T) {
-		server := serverInfo{"bar.example.com"}
+		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
 		assert.Equal(t, "", handleIrcMessage(&server, &state, nick))
 		assert.Equal(t, expected, handleIrcMessage(&server, &state, user))
 	})
 
 	t.Run("USER then NICK", func(t *testing.T) {
-		server := serverInfo{"bar.example.com"}
+		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
 		assert.Equal(t, "", handleIrcMessage(&server, &state, user))
 		assert.Equal(t, expected, handleIrcMessage(&server, &state, nick))
@@ -58,8 +59,8 @@ func TestNickErrors(t *testing.T) {
 		// {"ERR_RESTRICTED", "NICK", ":bar.example.com 484 :Your connection is restricted!\r\n"},
 	}
 
-	testServer := func() (serverInfo, connectionState) {
-		server := serverInfo{"bar.example.com"}
+	testServer := func() (ServerInfo, connectionState) {
+		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
 		return server, state
 	}
