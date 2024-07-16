@@ -73,3 +73,29 @@ func TestNickErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestUserErrors(t *testing.T) {
+	var tests = []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"ERR_NEEDMOREPARAMS", "USER guest 0 *", ":bar.example.com 461 USER :Not enough parameters\r\n"},
+		{"ERR_ALREADYREGISTERED", "USER guest 0 * :Joe Bloggs", ":bar.example.com 462 :Unauthorized command (already registered)\r\n"},
+	}
+
+	testServer := func() (ServerInfo, connectionState) {
+		server := MakeServer("bar.example.com")
+		state := newIrcConnection("foo.example.com")
+		handleIrcMessage(&server, &state, "NICK guest")
+		handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
+		return server, state
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, state := testServer()
+			assert.Equal(t, tt.expected, handleIrcMessage(&server, &state, tt.input))
+		})
+	}
+}

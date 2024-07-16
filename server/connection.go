@@ -43,7 +43,7 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 	}
 
 	// Check with server
-	resultChan := make(chan int)
+	resultChan := make(chan int, 1)
 	server.commandChan <- Command{NICK, params[0], make([]string, 0), resultChan}
 	result := <-resultChan
 	if result != OK {
@@ -67,6 +67,13 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 	return ""
 }
 func handleUser(server *ServerInfo, state *connectionState, params []string) (response string) {
+	if len(params) < 4 {
+		return errNeedMoreParams(server.name, "USER")
+	}
+	if len(state.user) > 0 {
+		return fmt.Sprintf(":%v 462 :Unauthorized command (already registered)\r\n", server.name)
+	}
+
 	state.user = params[0]
 
 	if len(state.nick) > 0 && !state.registered {
@@ -96,4 +103,8 @@ func tokenize(message string) (command string, params []string) {
 func rplWelcome(server string, nick string, user string, host string) string {
 	const rplWelcomeFormat = ":%v 001 %v :Welcome to the Internet Relay Network %v!%v@%v\r\n"
 	return fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host)
+}
+
+func errNeedMoreParams(server string, command string) string {
+	return fmt.Sprintf(":%v 461 %v :Not enough parameters\r\n", server, command)
 }

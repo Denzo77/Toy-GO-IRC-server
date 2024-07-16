@@ -18,9 +18,10 @@ type userInfo struct {
 }
 
 type Command struct {
-	command    int
-	nick       string
-	params     []string
+	command int
+	nick    string
+	params  []string
+	// Must be non blocking.
 	resultChan chan int
 }
 
