@@ -25,7 +25,7 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 	// Slightly hacky special case to avoid editing all command handlers
 	// TODO: May need to change anyway in the future.
 	if command == "QUIT" {
-		return handleQuit(server, state, params), true
+		return handleQuit(server, state, params)
 	}
 
 	handler, valid_command := ircCommands[command]
@@ -96,7 +96,11 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 }
 
 // End the session. Should respond and then end the connection.
-func handleQuit(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleQuit(server *ServerInfo, state *connectionState, params []string) (response []string, quit bool) {
+	if !state.registered {
+		return errUnregistered(server.name), false
+	}
+
 	resultChan := make(chan int, 1)
 	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
 	<-resultChan
@@ -108,7 +112,7 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 		message = params[0]
 	}
 
-	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}
+	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}, true
 }
 
 // utility functions
@@ -128,10 +132,25 @@ func tokenize(message string) (command string, params []string) {
 }
 
 func rplWelcome(server string, nick string, user string, host string) []string {
+	// FIXME:
+	const version = "0.0"
+	const creationDate = "01/01/1970"
+	const userModes = "0"
+	const channelModes = "0"
 	const rplWelcomeFormat = ":%v 001 %v :Welcome to the Internet Relay Network %v!%v@%v\r\n"
-	return []string{fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host)}
+	// TODO! Add MOTD and LUSER responses
+	return []string{
+		fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host),
+		fmt.Sprintf(":%v 002 %v :Your host is %v, running version %v\r\n", server, nick, server, version),
+		fmt.Sprintf(":%v 003 %v :This server was created %v\r\n", server, nick, creationDate),
+		fmt.Sprintf(":%v 004 %v :%v %v %v %v\r\n", server, nick, server, version, userModes, channelModes),
+	}
 }
 
 func errNeedMoreParams(server string, command string) []string {
 	return []string{fmt.Sprintf(":%v 461 %v :Not enough parameters\r\n", server, command)}
+}
+
+func errUnregistered(server string) []string {
+	return []string{fmt.Sprintf(":%v 451 :You have not registered\r\n", server)}
 }

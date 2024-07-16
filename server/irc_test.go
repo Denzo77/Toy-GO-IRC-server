@@ -21,7 +21,7 @@ func TestUnknownCommandRespondsWithError(t *testing.T) {
 	assert.False(t, quit)
 }
 
-func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
+func TestRegisterUserRespondsWithRpl(t *testing.T) {
 	// Expected messages
 	// 1. Password (not implemented)
 	// 2. Nickname message
@@ -32,6 +32,9 @@ func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
 	// Response: RPL_WELCOME containing full client identifier
 	expected := []string{
 		":bar.example.com 001 nick :Welcome to the Internet Relay Network nick!user@foo.example.com\r\n",
+		":bar.example.com 002 nick :Your host is bar.example.com, running version 0.0\r\n",
+		":bar.example.com 003 nick :This server was created 01/01/1970\r\n",
+		":bar.example.com 004 nick :bar.example.com 0.0 0 0\r\n",
 	}
 
 	t.Run("NICK then USER", func(t *testing.T) {
@@ -117,6 +120,27 @@ func TestUserErrors(t *testing.T) {
 
 			response, quit := handleIrcMessage(&server, &state, tt.input)
 			assert.Equal(t, tt.expected, response)
+			assert.False(t, quit)
+		})
+	}
+}
+
+func TestCommandsRejectedIfNotRegistered(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input string
+	}{
+		{"QUIT", "QUIT"},
+	}
+
+	expected := []string{":bar.example.com 451 :You have not registered\r\n"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+			state := newIrcConnection("foo.example.com")
+			response, quit := handleIrcMessage(&server, &state, tt.input)
+			assert.Equal(t, expected, response)
 			assert.False(t, quit)
 		})
 	}
