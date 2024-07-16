@@ -126,20 +126,24 @@ func TestUserErrors(t *testing.T) {
 }
 
 func TestCommandsRejectedIfNotRegistered(t *testing.T) {
-	var tests = []struct {
-		name  string
-		input string
-	}{
-		{"QUIT", "QUIT"},
+	var tests = []string{
+		"QUIT",
+		"PRIVMSG",
+		"NOTICE",
+		"PING",
+		"PONG",
+		"MOTD",
+		"LUSERS",
+		"WHOIS",
 	}
 
 	expected := []string{":bar.example.com 451 :You have not registered\r\n"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, command := range tests {
+		t.Run(command, func(t *testing.T) {
 			server := MakeServer("bar.example.com")
 			state := newIrcConnection("foo.example.com")
-			response, quit := handleIrcMessage(&server, &state, tt.input)
+			response, quit := handleIrcMessage(&server, &state, command)
 			assert.Equal(t, expected, response)
 			assert.False(t, quit)
 		})

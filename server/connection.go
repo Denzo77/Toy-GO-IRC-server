@@ -42,6 +42,13 @@ var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) []st
 	"NICK": handleNick,
 	"USER": handleUser,
 	// "QUIT": handleQuit,
+	"PRIVMSG": handlePrivmsg,
+	"NOTICE":  handleNotice,
+	"PING":    handlePing,
+	"PONG":    handlePong,
+	"MOTD":    handleMotd,
+	"LUSERS":  handleLusers,
+	"WHOIS":   handleWhois,
 }
 
 // Registers the user with a unique identifier
@@ -119,6 +126,56 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 
 	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}, true
 }
+
+func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handleNotice(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handlePing(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handlePong(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handleMotd(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handleLusers(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+func handleWhois(server *ServerInfo, state *connectionState, params []string) (response []string) {
+	if !state.registered {
+		return errUnregistered(server.name)
+	}
+	return []string{}
+}
+
+// func handle(server *ServerInfo, state *connectionState, params []string) (response []string) {
+// if !state.registered {
+// 	return errUnregistered(server.name)
+// }
+// 	return []string{}
+// }
 
 // utility functions
 func tokenize(message string) (command string, params []string) {
