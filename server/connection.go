@@ -22,6 +22,12 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 	// tokens := irc_tokenize(message)
 	command, params := tokenize(message)
 
+	// Slightly hacky special case to avoid editing all command handlers
+	// TODO: May need to change anyway in the future.
+	if command == "QUIT" {
+		return handleQuit(server, state, params), true
+	}
+
 	handler, valid_command := ircCommands[command]
 	if !valid_command {
 		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command), false
@@ -35,7 +41,7 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) string){
 	"NICK": handleNick,
 	"USER": handleUser,
-	"QUIT": handleQuit,
+	// "QUIT": handleQuit,
 }
 
 // Registers the user with a unique identifier
@@ -91,6 +97,10 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 
 // End the session. Should respond and then end the connection.
 func handleQuit(server *ServerInfo, state *connectionState, params []string) (response string) {
+	resultChan := make(chan int, 1)
+	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
+	<-resultChan
+
 	return "ERROR\r\n"
 }
 

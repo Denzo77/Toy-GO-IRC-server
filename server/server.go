@@ -25,12 +25,6 @@ type Command struct {
 	resultChan chan int
 }
 
-// Commands
-const (
-	NICK = iota
-	USER
-)
-
 // Error values
 const (
 	OK                = 0
@@ -52,17 +46,26 @@ func MakeServer(serverName string) (server ServerInfo) {
 
 	go func() {
 		for c := range commandChan {
-			// updateData[c.command](c.params)
-			c.resultChan <- setNick(&context, c.nick, c.params)
+			c.resultChan <- updateData[c.command](&context, c.nick, c.params)
 		}
 	}()
 
 	return
 }
 
-// var updateData := []func(){
+// Commands
+const (
+	NICK = iota
+	USER
+	QUIT
+)
 
-// }
+var updateData = [](func(*serverContext, string, []string) int){
+	setNick,
+	setUser,
+	unregisterUser,
+}
+
 func setNick(context *serverContext, nick string, params []string) int {
 	// Check if nickname already registered
 	_, present := context.users[nick]
@@ -72,6 +75,16 @@ func setNick(context *serverContext, nick string, params []string) int {
 
 	// if not, add nickname
 	context.users[nick] = userInfo{}
+
+	return OK
+}
+
+func setUser(context *serverContext, nick string, params []string) int {
+	return OK
+}
+
+func unregisterUser(context *serverContext, nick string, params []string) int {
+	delete(context.users, nick)
 
 	return OK
 }
