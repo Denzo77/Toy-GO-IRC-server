@@ -146,6 +146,19 @@ func TestCommandsRejectedIfNotRegistered(t *testing.T) {
 	}
 }
 
+func TestNickUpdatesNickName(t *testing.T) {
+	// Setup
+	server := MakeServer("bar.example.com")
+	state := newIrcConnection("foo.example.com")
+	handleIrcMessage(&server, &state, "NICK guest")
+	handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
+
+	// Test
+	response, quit := handleIrcMessage(&server, &state, "NICK notguest")
+	assert.Equal(t, []string{":guest NICK notguest\r\n"}, response)
+	assert.False(t, quit)
+}
+
 func TestQuitEndsConnection(t *testing.T) {
 	testServer := func() (ServerInfo, connectionState) {
 		server := MakeServer("bar.example.com")
@@ -164,6 +177,7 @@ func TestQuitEndsConnection(t *testing.T) {
 		assert.True(t, quit)
 
 		// Test that user has been unregistered by checking if we can add them again.
+		state = newIrcConnection("foo.example.com")
 		response, _ = handleIrcMessage(&server, &state, "NICK guest")
 		assert.Equal(t, []string{}, response)
 	})
@@ -176,6 +190,7 @@ func TestQuitEndsConnection(t *testing.T) {
 		assert.True(t, quit)
 
 		// Test that user has been unregistered by checking if we can add them again.
+		state = newIrcConnection("foo.example.com")
 		response, _ = handleIrcMessage(&server, &state, "NICK guest")
 		assert.Equal(t, []string{}, response)
 	})

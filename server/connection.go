@@ -64,6 +64,7 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		}
 	}
 
+	oldNick := state.nick
 	state.nick = params[0]
 
 	// Fix this logic
@@ -72,7 +73,11 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
-	return []string{}
+	if len(oldNick) == 0 {
+		return []string{}
+	} else {
+		return []string{fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)}
+	}
 }
 
 // Additional data about the user.
