@@ -59,7 +59,9 @@ func handleConnection(conn net.Conn, server *ServerInfo) {
 
 		response, quit := handleIrcMessage(server, &state, netData)
 
-		conn.Write([]byte(response))
+		for _, r := range response {
+			conn.Write([]byte(r))
+		}
 		// fmt.Print("-> ", string(netData))
 		// t := time.Now()
 		// myTime := t.Format(time.RFC3339) + "\n"

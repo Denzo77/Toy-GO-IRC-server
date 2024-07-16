@@ -18,7 +18,7 @@ func newIrcConnection(host string) connectionState {
 	}
 }
 
-func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (response string, quit bool) {
+func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (response []string, quit bool) {
 	// tokens := irc_tokenize(message)
 	command, params := tokenize(message)
 
@@ -30,7 +30,7 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 
 	handler, valid_command := ircCommands[command]
 	if !valid_command {
-		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command), false
+		return []string{fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)}, false
 	}
 
 	return handler(server, state, params), false
@@ -38,16 +38,16 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 
 // Commands
 // Dispatch table
-var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) string){
+var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) []string){
 	"NICK": handleNick,
 	"USER": handleUser,
 	// "QUIT": handleQuit,
 }
 
 // Registers the user with a unique identifier
-func handleNick(server *ServerInfo, state *connectionState, params []string) (response string) {
+func handleNick(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if len(params) < 1 {
-		return fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)
+		return []string{fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)}
 	}
 
 	// Check with server
@@ -57,10 +57,10 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 	if result != OK {
 		switch result {
 		case ERR_NICKNAMEINUSE:
-			return fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])
+			return []string{fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])}
 		default:
 			// TODO:
-			return ""
+			return []string{}
 		}
 	}
 
@@ -72,17 +72,17 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
-	return ""
+	return []string{}
 }
 
 // Additional data about the user.
 // TODO: Is this required to complete registration?
-func handleUser(server *ServerInfo, state *connectionState, params []string) (response string) {
+func handleUser(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if len(params) < 4 {
 		return errNeedMoreParams(server.name, "USER")
 	}
 	if len(state.user) > 0 {
-		return fmt.Sprintf(":%v 462 :Unauthorized command (already registered)\r\n", server.name)
+		return []string{fmt.Sprintf(":%v 462 :Unauthorized command (already registered)\r\n", server.name)}
 	}
 
 	state.user = params[0]
@@ -92,11 +92,11 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
-	return ""
+	return []string{}
 }
 
 // End the session. Should respond and then end the connection.
-func handleQuit(server *ServerInfo, state *connectionState, params []string) (response string) {
+func handleQuit(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	resultChan := make(chan int, 1)
 	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
 	<-resultChan
@@ -108,7 +108,7 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 		message = params[0]
 	}
 
-	return fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)
+	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}
 }
 
 // utility functions
@@ -127,11 +127,11 @@ func tokenize(message string) (command string, params []string) {
 	return tokens[0], tokens[1:]
 }
 
-func rplWelcome(server string, nick string, user string, host string) string {
+func rplWelcome(server string, nick string, user string, host string) []string {
 	const rplWelcomeFormat = ":%v 001 %v :Welcome to the Internet Relay Network %v!%v@%v\r\n"
-	return fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host)
+	return []string{fmt.Sprintf(rplWelcomeFormat, server, nick, nick, user, host)}
 }
 
-func errNeedMoreParams(server string, command string) string {
-	return fmt.Sprintf(":%v 461 %v :Not enough parameters\r\n", server, command)
+func errNeedMoreParams(server string, command string) []string {
+	return []string{fmt.Sprintf(":%v 461 %v :Not enough parameters\r\n", server, command)}
 }
