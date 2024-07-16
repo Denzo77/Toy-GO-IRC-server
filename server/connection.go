@@ -18,16 +18,16 @@ func newIrcConnection(host string) connectionState {
 	}
 }
 
-func handleIrcMessage(server *ServerInfo, state *connectionState, message string) string {
+func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (response string, quit bool) {
 	// tokens := irc_tokenize(message)
 	command, params := tokenize(message)
 
 	handler, valid_command := ircCommands[command]
 	if !valid_command {
-		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)
+		return fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command), false
 	}
 
-	return handler(server, state, params)
+	return handler(server, state, params), false
 }
 
 // Commands
@@ -35,8 +35,10 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) string){
 	"NICK": handleNick,
 	"USER": handleUser,
+	"QUIT": handleQuit,
 }
 
+// Registers the user with a unique identifier
 func handleNick(server *ServerInfo, state *connectionState, params []string) (response string) {
 	if len(params) < 1 {
 		return fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)
@@ -66,6 +68,9 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 
 	return ""
 }
+
+// Additional data about the user.
+// TODO: Is this required to complete registration?
 func handleUser(server *ServerInfo, state *connectionState, params []string) (response string) {
 	if len(params) < 4 {
 		return errNeedMoreParams(server.name, "USER")
@@ -82,6 +87,11 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 	}
 
 	return ""
+}
+
+// End the session. Should respond and then end the connection.
+func handleQuit(server *ServerInfo, state *connectionState, params []string) (response string) {
+	return "ERROR\r\n"
 }
 
 // utility functions

@@ -14,9 +14,11 @@ func TestUnknownCommandRespondsWithError(t *testing.T) {
 	expected := ":bar.example.com 421 FOO :Unknown command\r\n"
 
 	server := MakeServer("bar.example.com")
-
 	state := newIrcConnection("foo.example.com")
-	assert.Equal(t, expected, handleIrcMessage(&server, &state, "FOO this fails\r\n"))
+
+	response, quit := handleIrcMessage(&server, &state, "FOO this fails\r\n")
+	assert.Equal(t, expected, response)
+	assert.False(t, quit)
 }
 
 func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
@@ -33,15 +35,27 @@ func TestRegisterUserRespondsWithRplWelcome(t *testing.T) {
 	t.Run("NICK then USER", func(t *testing.T) {
 		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
-		assert.Equal(t, "", handleIrcMessage(&server, &state, nick))
-		assert.Equal(t, expected, handleIrcMessage(&server, &state, user))
+
+		response, quit := handleIrcMessage(&server, &state, nick)
+		assert.Equal(t, "", response)
+		assert.False(t, quit)
+
+		response, quit = handleIrcMessage(&server, &state, user)
+		assert.Equal(t, expected, response)
+		assert.False(t, quit)
 	})
 
 	t.Run("USER then NICK", func(t *testing.T) {
 		server := MakeServer("bar.example.com")
 		state := newIrcConnection("foo.example.com")
-		assert.Equal(t, "", handleIrcMessage(&server, &state, user))
-		assert.Equal(t, expected, handleIrcMessage(&server, &state, nick))
+
+		response, quit := handleIrcMessage(&server, &state, user)
+		assert.Equal(t, "", response)
+		assert.False(t, quit)
+
+		response, quit = handleIrcMessage(&server, &state, nick)
+		assert.Equal(t, expected, response)
+		assert.False(t, quit)
 	})
 }
 
@@ -69,7 +83,10 @@ func TestNickErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server, state := testServer()
-			assert.Equal(t, tt.expected, handleIrcMessage(&server, &state, tt.input))
+
+			response, quit := handleIrcMessage(&server, &state, tt.input)
+			assert.Equal(t, tt.expected, response)
+			assert.False(t, quit)
 		})
 	}
 }
@@ -95,7 +112,25 @@ func TestUserErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server, state := testServer()
-			assert.Equal(t, tt.expected, handleIrcMessage(&server, &state, tt.input))
+
+			response, quit := handleIrcMessage(&server, &state, tt.input)
+			assert.Equal(t, tt.expected, response)
+			assert.False(t, quit)
 		})
 	}
+}
+
+func TestQuitEndsConnection(t *testing.T) {
+	server := MakeServer("bar.example.com")
+	state := newIrcConnection("foo.example.com")
+	handleIrcMessage(&server, &state, "NICK guest")
+	handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
+
+	response, quit := handleIrcMessage(&server, &state, "QUIT :Gone to have lunch")
+	assert.Equal(t, "ERROR\r\n", response)
+	assert.True(t, quit)
+
+	// Test that user has been unregistered by checking if we can add them again.
+	response, _ = handleIrcMessage(&server, &state, "NICK guest")
+	assert.Equal(t, "", response)
 }

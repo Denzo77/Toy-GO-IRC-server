@@ -54,13 +54,17 @@ func handleConnection(conn net.Conn, server *ServerInfo) {
 			return
 		}
 
-		response := handleIrcMessage(server, &state, netData)
+		response, quit := handleIrcMessage(server, &state, netData)
 
 		conn.Write([]byte(response))
 		// fmt.Print("-> ", string(netData))
 		// t := time.Now()
 		// myTime := t.Format(time.RFC3339) + "\n"
+
+		if quit {
+			break
+		}
 	}
 
-	// conn.Close()
+	conn.Close()
 }
