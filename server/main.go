@@ -48,6 +48,9 @@ func handleConnection(conn net.Conn, server *ServerInfo) {
 	state := newIrcConnection(conn.RemoteAddr().String())
 
 	for {
+		// Should split on "\r\n"
+		// See https://pkg.go.dev/bufio#Scanner & implementation of SplitLine
+		// Could not get it to correctly handle EOF.
 		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			fmt.Println(err)
