@@ -121,16 +121,36 @@ func TestUserErrors(t *testing.T) {
 }
 
 func TestQuitEndsConnection(t *testing.T) {
-	server := MakeServer("bar.example.com")
-	state := newIrcConnection("foo.example.com")
-	handleIrcMessage(&server, &state, "NICK guest")
-	handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
+	testServer := func() (ServerInfo, connectionState) {
+		server := MakeServer("bar.example.com")
+		state := newIrcConnection("foo.example.com")
+		handleIrcMessage(&server, &state, "NICK guest")
+		handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
 
-	response, quit := handleIrcMessage(&server, &state, "QUIT :Gone to have lunch")
-	assert.Equal(t, "ERROR\r\n", response)
-	assert.True(t, quit)
+		return server, state
+	}
 
-	// Test that user has been unregistered by checking if we can add them again.
-	response, _ = handleIrcMessage(&server, &state, "NICK guest")
-	assert.Equal(t, "", response)
+	t.Run("QUIT with default message", func(t *testing.T) {
+		server, state := testServer()
+
+		response, quit := handleIrcMessage(&server, &state, "QUIT")
+		assert.Equal(t, ":bar.example.com ERROR :Closing Link: foo.example.com Client Quit\r\n", response)
+		assert.True(t, quit)
+
+		// Test that user has been unregistered by checking if we can add them again.
+		response, _ = handleIrcMessage(&server, &state, "NICK guest")
+		assert.Equal(t, "", response)
+	})
+
+	t.Run("QUIT with custom message", func(t *testing.T) {
+		server, state := testServer()
+
+		response, quit := handleIrcMessage(&server, &state, "QUIT :Gone to have lunch")
+		assert.Equal(t, ":bar.example.com ERROR :Closing Link: foo.example.com Gone to have lunch\r\n", response)
+		assert.True(t, quit)
+
+		// Test that user has been unregistered by checking if we can add them again.
+		response, _ = handleIrcMessage(&server, &state, "NICK guest")
+		assert.Equal(t, "", response)
+	})
 }

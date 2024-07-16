@@ -101,7 +101,14 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
 	<-resultChan
 
-	return "ERROR\r\n"
+	message := ""
+	if len(params) == 0 {
+		message = "Client Quit"
+	} else {
+		message = params[0]
+	}
+
+	return fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)
 }
 
 // utility functions
