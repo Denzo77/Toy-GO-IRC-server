@@ -18,22 +18,43 @@ func newIrcConnection(host string) connectionState {
 	}
 }
 
-func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (response []string, quit bool) {
-	// tokens := irc_tokenize(message)
-	command, params := tokenize(message)
+func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (responseChan chan string, quitChan chan bool) {
+	responseChan = make(chan string)
+	quitChan = make(chan bool, 1)
 
-	// Slightly hacky special case to avoid editing all command handlers
-	// TODO: May need to change anyway in the future.
-	if command == "QUIT" {
-		return handleQuit(server, state, params)
+	respondMultiple := func(response []string) {
+		for _, r := range response {
+			responseChan <- r
+		}
 	}
 
-	handler, valid_command := ircCommands[command]
-	if !valid_command {
-		return []string{fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)}, false
-	}
+	go func() {
+		defer close(responseChan)
+		defer close(quitChan)
 
-	return handler(server, state, params), false
+		command, params := tokenize(message)
+
+		// Slightly hacky special case to avoid editing all command handlers
+		// TODO: May need to change anyway in the future.
+		if command == "QUIT" {
+			response, quit := handleQuit(server, state, params)
+			respondMultiple(response)
+			if quit {
+				quitChan <- quit
+			}
+			return
+		}
+
+		handler, valid_command := ircCommands[command]
+		if !valid_command {
+			responseChan <- fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)
+			return
+		}
+
+		respondMultiple(handler(server, state, params))
+	}()
+
+	return
 }
 
 // Commands

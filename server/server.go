@@ -45,7 +45,8 @@ func MakeServer(serverName string) (server ServerInfo) {
 	}
 
 	go func() {
-		for c := range commandChan {
+		for {
+			c := <-commandChan
 			c.resultChan <- updateData[c.command](&context, c.nick, c.params)
 		}
 	}()

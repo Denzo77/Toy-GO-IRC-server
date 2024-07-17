@@ -52,24 +52,25 @@ func handleConnection(conn net.Conn, server *ServerInfo) {
 		// See https://pkg.go.dev/bufio#Scanner & implementation of SplitLine
 		// Could not get it to correctly handle EOF.
 		netData, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
+		if bufio.ErrBadReadCount != nil {
 			fmt.Println(err)
 			return
 		}
+		responseChan, quitChan := handleIrcMessage(server, &state, netData)
 
-		response, quit := handleIrcMessage(server, &state, netData)
-
-		for _, r := range response {
+		for r := range responseChan {
 			conn.Write([]byte(r))
 		}
 		// fmt.Print("-> ", string(netData))
 		// t := time.Now()
 		// myTime := t.Format(time.RFC3339) + "\n"
 
-		if quit {
-			break
+		select {
+		case <-quitChan:
+			conn.Close()
+			return
+		default:
+			continue
 		}
 	}
-
-	conn.Close()
 }
