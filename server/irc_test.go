@@ -276,3 +276,39 @@ func TestPrivmsgReachesRecipient(t *testing.T) {
 	response, _ := receiver.ReadString('\n')
 	assert.Equal(t, ":sender PRIVMSG receiver :This is a message\r\n", response)
 }
+
+func TestPrivmsgErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"ERR_NOSUCHNICK", "PRIVMSG foo :Message\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+		{"ERR_NORECIPIENT", "PRIVMSG \r\n", ":bar.example.com 411 sender :No recipient given (PRIVMSG)\r\n"},
+		{"ERR_NOTEXTTOSEND", "PRIVMSG reciever\r\n", ":bar.example.com 412 sender :No text to send\r\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client)
+
+				return
+			}
+
+			sender := newTestConn("sender")
+			writeAndFlush(sender, tt.input)
+			response, _ := sender.ReadString('\n')
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, sender.Reader.Buffered())
+		})
+	}
+}

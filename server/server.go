@@ -39,8 +39,9 @@ type Registration struct {
 
 // Error values
 const (
-	OK                = 0
-	ERR_NICKNAMEINUSE = 433
+	OK                 = 0
+	ERR_NOSUCHNICKNAME = 401
+	ERR_NICKNAMEINUSE  = 433
 )
 
 func MakeServer(serverName string) (server ServerInfo) {
@@ -94,7 +95,6 @@ var updateData = [](func(*serverContext, string, []string) int){
 func setNick(context *serverContext, nick string, params []string) int {
 	// Check if nickname already registered
 	_, present := context.users[nick]
-
 	if present {
 		return ERR_NICKNAMEINUSE
 	}
@@ -118,6 +118,13 @@ func unregisterUser(context *serverContext, nick string, params []string) int {
 func privMsg(context *serverContext, nick string, params []string) int {
 	target := params[0]
 	message := params[1]
+
+	// Check if nickname already registered
+	_, present := context.users[target]
+	if !present {
+		return ERR_NOSUCHNICKNAME
+	}
+
 	context.users[target].channel <- message
 
 	return OK

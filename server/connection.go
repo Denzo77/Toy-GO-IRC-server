@@ -197,12 +197,21 @@ func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) 
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
+	if len(params) == 0 {
+		return []string{fmt.Sprintf(":%v 411 %v :No recipient given (PRIVMSG)\r\n", server.name, state.nick)}
+	}
+	if len(params) == 1 {
+		return []string{fmt.Sprintf(":%v 412 %v :No text to send\r\n", server.name, state.nick)}
+	}
 
 	message := fmt.Sprintf(":%v PRIVMSG %v :%v\r\n", state.nick, params[0], params[1])
 
 	resultChan := make(chan int, 1)
 	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
-	<-resultChan
+	result := <-resultChan
+	if result == ERR_NOSUCHNICKNAME {
+		return []string{fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])}
+	}
 
 	return []string{"\r\n"}
 }
@@ -256,7 +265,7 @@ func isRegistered(state connectionState) bool {
 }
 
 func tokenize(message string) (command string, params []string) {
-	message, _ = strings.CutSuffix(message, "\r\n")
+	message = strings.TrimSpace(message)
 
 	// params are a space delimited list of up to 14 parameters
 	// followed by an optional trailer marked with a ":"
