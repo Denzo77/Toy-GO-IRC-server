@@ -58,12 +58,8 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 				}
 				writer.Flush()
 			case message := <-state.messageChan:
-				print("rx: ")
-				println(message)
 				writer.WriteString(message)
-				println("rx: flushing")
 				writer.Flush()
-				println("rx: flushed")
 			case <-state.quit:
 				connection.Close()
 				return

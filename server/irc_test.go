@@ -265,13 +265,9 @@ func TestPrivmsg(t *testing.T) {
 	sender := newTestConn("sender")
 	receiver := newTestConn("receiver")
 
-	println("send message")
 	writeAndFlush(sender, "PRIVMSG receiver :This is a message\r\n")
-	println("discard response")
 	discardResponse(sender)
 
-	println("check message received")
 	response, _ := receiver.ReadString('\n')
-	println("test result")
 	assert.Equal(t, ":sender PRIVMSG receiver :This is a message\r\n", response)
 }
