@@ -52,7 +52,7 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 			select {
 			case netData := <-data:
 				// TODO: remove pointers
-				responseChan := handleIrcMessage(&server, &state, netData)
+				responseChan := handleIrcMessage(server, &state, netData)
 				for r := range responseChan {
 					writer.WriteString(r)
 				}
@@ -73,7 +73,7 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 
 }
 
-func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (responseChan chan string) {
+func handleIrcMessage(server ServerInfo, state *connectionState, message string) (responseChan chan string) {
 	responseChan = make(chan string)
 
 	respondMultiple := func(response []string) {
@@ -115,7 +115,7 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 
 // Commands
 // Dispatch table
-var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) []string){
+var ircCommands = map[string](func(ServerInfo, *connectionState, []string) []string){
 	"NICK": handleNick,
 	"USER": handleUser,
 	// "QUIT": handleQuit,
@@ -129,14 +129,14 @@ var ircCommands = map[string](func(*ServerInfo, *connectionState, []string) []st
 }
 
 // Registers the user with a unique identifier
-func handleNick(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleNick(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if len(params) < 1 {
 		return []string{fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)}
 	}
 
 	if isRegistered(*state) {
 		// 1: already registered
-		err := trySetNick(*server, params[0])
+		err := trySetNick(server, params[0])
 		if err != nil {
 			return []string{err.Error()}
 		}
@@ -149,14 +149,14 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		state.nick = params[0]
 		return []string{"\r\n"}
 	} else {
-		return tryRegister(*server, state, params[0])
+		return tryRegister(server, state, params[0])
 	}
 
 }
 
 // Additional data about the user.
 // TODO: Is this required to complete registration?
-func handleUser(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleUser(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if len(params) < 4 {
 		return errNeedMoreParams(server.name, "USER")
 	}
@@ -169,12 +169,12 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 	if len(state.nick) == 0 {
 		return []string{"\r\n"}
 	} else {
-		return tryRegister(*server, state, state.nick)
+		return tryRegister(server, state, state.nick)
 	}
 }
 
 // End the session. Should respond and then end the connection.
-func handleQuit(server *ServerInfo, state *connectionState, params []string) (response []string, quit bool) {
+func handleQuit(server ServerInfo, state *connectionState, params []string) (response []string, quit bool) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name), false
 	}
@@ -193,7 +193,7 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}, true
 }
 
-func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handlePrivmsg(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
@@ -215,44 +215,44 @@ func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) 
 
 	return []string{"\r\n"}
 }
-func handleNotice(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleNotice(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
-func handlePing(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handlePing(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
-func handlePong(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handlePong(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
-func handleMotd(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleMotd(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
-func handleLusers(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleLusers(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
-func handleWhois(server *ServerInfo, state *connectionState, params []string) (response []string) {
+func handleWhois(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 
-// func handle(server *ServerInfo, state *connectionState, params []string) (response []string) {
+// func handle(server ServerInfo, state *connectionState, params []string) (response []string) {
 // if !isRegistered(*state) {
 // 	return errUnregistered(server.name)
 // }
