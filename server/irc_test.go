@@ -253,7 +253,7 @@ func TestQuitEndsConnection(t *testing.T) {
 	}
 }
 
-func TestPrivmsg(t *testing.T) {
+func TestPrivmsgReachesRecipient(t *testing.T) {
 	server := MakeServer("bar.example.com")
 
 	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
