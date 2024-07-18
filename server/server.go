@@ -33,6 +33,7 @@ type Command struct {
 
 type Registration struct {
 	nick        string
+	user        string
 	messageChan chan<- string
 }
 

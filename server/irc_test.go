@@ -71,6 +71,7 @@ func TestRegisterUserRespondsWithRpl(t *testing.T) {
 			writeAndFlush(client, tt.first)
 			r, _ := client.ReadString('\n')
 			assert.Equal(t, "\r\n", r)
+			assert.Zero(t, client.Reader.Buffered())
 
 			writeAndFlush(client, tt.second)
 
@@ -109,10 +110,14 @@ func TestNickErrors(t *testing.T) {
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
 			discardResponse(client)
+			writeAndFlush(client, "USER 0 * guest :Joe Blogs\r\n")
+			discardResponse(client)
 
 			// start test
 			client2, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
+			writeAndFlush(client2, "USER 0 * guest :Joe Blogs\r\n")
+			discardResponse(client2)
 			writeAndFlush(client2, tt.input)
 			response, _ := client2.ReadString('\n')
 

@@ -9,19 +9,19 @@ import (
 
 type connectionState struct {
 	connection  net.Conn
+	host        string
 	nick        string
 	user        string
-	host        string
 	messageChan <-chan string
 	quit        chan bool
-	// get rid of this
-	registered bool
 }
 
 func newIrcConnection(server ServerInfo, connection net.Conn) {
 	state := connectionState{
 		connection: connection,
 		host:       connection.RemoteAddr().String(),
+		nick:       "",
+		user:       "",
 		quit:       make(chan bool),
 	}
 
@@ -134,38 +134,24 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 		return []string{fmt.Sprintf(":%v 431 :No nickname given\r\n", server.name)}
 	}
 
-	// Check with server
-	resultChan := make(chan int, 1)
-	server.commandChan <- Command{NICK, params[0], make([]string, 0), resultChan}
-	result := <-resultChan
-	if result == OK {
-		messageChan := make(chan string, 1)
-		state.messageChan = messageChan
-		server.registrationChan <- Registration{params[0], messageChan}
-	} else {
-		switch result {
-		case ERR_NICKNAMEINUSE:
-			return []string{fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])}
-		default:
-			// TODO:
-			return []string{"\r\n"}
+	if isRegistered(*state) {
+		// 1: already registered
+		err := trySetNick(*server, params[0])
+		if err != nil {
+			return []string{err.Error()}
 		}
-	}
 
-	oldNick := state.nick
-	state.nick = params[0]
-
-	// Fix this logic
-	if len(state.user) > 0 && !state.registered {
-		state.registered = true
-		return rplWelcome(server.name, state.nick, state.user, state.host)
-	}
-
-	if len(oldNick) == 0 {
+		oldNick := state.nick
+		state.nick = params[0]
+		return []string{fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)}
+	} else if len(state.user) == 0 {
+		// 2: no user details
+		state.nick = params[0]
 		return []string{"\r\n"}
 	} else {
-		return []string{fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)}
+		return tryRegister(*server, state, params[0])
 	}
+
 }
 
 // Additional data about the user.
@@ -180,17 +166,16 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 
 	state.user = params[0]
 
-	if len(state.nick) > 0 && !state.registered {
-		state.registered = true
-		return rplWelcome(server.name, state.nick, state.user, state.host)
+	if len(state.nick) == 0 {
+		return []string{"\r\n"}
+	} else {
+		return tryRegister(*server, state, state.nick)
 	}
-
-	return []string{"\r\n"}
 }
 
 // End the session. Should respond and then end the connection.
 func handleQuit(server *ServerInfo, state *connectionState, params []string) (response []string, quit bool) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name), false
 	}
 
@@ -209,7 +194,7 @@ func handleQuit(server *ServerInfo, state *connectionState, params []string) (re
 }
 
 func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 
@@ -222,50 +207,54 @@ func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) 
 	return []string{"\r\n"}
 }
 func handleNotice(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 func handlePing(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 func handlePong(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 func handleMotd(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 func handleLusers(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 func handleWhois(server *ServerInfo, state *connectionState, params []string) (response []string) {
-	if !state.registered {
+	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
 	return []string{"\r\n"}
 }
 
 // func handle(server *ServerInfo, state *connectionState, params []string) (response []string) {
-// if !state.registered {
+// if !isRegistered(*state) {
 // 	return errUnregistered(server.name)
 // }
 // 	return []string{}
 // }
 
 // utility functions
+func isRegistered(state connectionState) bool {
+	return len(state.nick) > 0 && len(state.user) > 0
+}
+
 func tokenize(message string) (command string, params []string) {
 	message, _ = strings.CutSuffix(message, "\r\n")
 
@@ -279,6 +268,48 @@ func tokenize(message string) (command string, params []string) {
 	}
 
 	return tokens[0], tokens[1:]
+}
+
+type nickNameInUseError struct {
+	server string
+	nick   string
+}
+
+func (e *nickNameInUseError) Error() string {
+	return fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", e.server, e.nick)
+}
+
+// Will clear state.nick if nickname already in use
+func tryRegister(server ServerInfo, state *connectionState, nick string) []string {
+	err := trySetNick(server, nick)
+	if err != nil {
+		state.nick = ""
+		return []string{err.Error()}
+	}
+
+	state.nick = nick
+
+	messageChan := make(chan string, 1)
+	state.messageChan = messageChan
+	server.registrationChan <- Registration{state.nick, state.user, messageChan}
+	return rplWelcome(server.name, state.nick, state.user, state.host)
+}
+
+func trySetNick(server ServerInfo, nick string) error {
+	// Check with server
+	resultChan := make(chan int, 1)
+	server.commandChan <- Command{NICK, nick, make([]string, 0), resultChan}
+	result := <-resultChan
+
+	switch result {
+	case OK:
+		return nil
+	case ERR_NICKNAMEINUSE:
+		return &nickNameInUseError{server.name, nick}
+	default:
+		// FIXME: This should still be an error case
+		panic(0)
+	}
 }
 
 func rplWelcome(server string, nick string, user string, host string) []string {
