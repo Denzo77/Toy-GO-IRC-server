@@ -1,20 +1,28 @@
 package main
 
 import (
-	"fmt"
+	"bufio"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// Reads all the elements from a channel and returns the results as a string.
-func drainChannel(channel chan string) []string {
-	var response []string
-	for r := range channel {
-		response = append(response, r)
-	}
+func makeTestConn() (client *bufio.ReadWriter, server net.Conn) {
+	conn, server := net.Pipe()
+	client = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
-	return response
+	return
+}
+
+func writeAndFlush(writer *bufio.ReadWriter, s string) {
+	writer.WriteString(s)
+	writer.Flush()
+}
+
+func discardResponse(reader *bufio.ReadWriter) {
+	reader.ReadString('\n')
+	reader.Reader.Discard(reader.Reader.Buffered())
 }
 
 func TestAssert(t *testing.T) {
@@ -24,91 +32,89 @@ func TestAssert(t *testing.T) {
 func TestUnknownCommandRespondsWithError(t *testing.T) {
 	expected := ":bar.example.com 421 FOO :Unknown command\r\n"
 
+	client, serverConn := makeTestConn()
 	server := MakeServer("bar.example.com")
-	state := newIrcConnection("foo.example.com")
+	newIrcConnection(server, serverConn)
 
-	responseChan, quitChan := handleIrcMessage(&server, &state, "FOO this fails\r\n")
-	assert.Equal(t, expected, <-responseChan)
-	assert.Empty(t, quitChan)
+	writeAndFlush(client, "FOO this fails\r\n")
+	response, _ := client.ReadString('\n')
+
+	assert.Equal(t, expected, response)
 }
 
 func TestRegisterUserRespondsWithRpl(t *testing.T) {
-	// Expected messages
-	// 1. Password (not implemented)
-	// 2. Nickname message
-	nick := "NICK nick\r\n"
-	// 3. User message
-	user := "USER user 0 * :Joe Bloggs\r\n"
+	tests := []struct {
+		name   string
+		first  string
+		second string
+	}{
+		{"NICK then USER", "NICK nick\r\n", "USER user 0 * :Joe Bloggs\r\n"},
+		{"USER then NICK", "USER user 0 * :Joe Bloggs\r\n", "NICK nick\r\n"},
+	}
 
 	// Response: RPL_WELCOME containing full client identifier
 	expected := []string{
-		":bar.example.com 001 nick :Welcome to the Internet Relay Network nick!user@foo.example.com\r\n",
+		":bar.example.com 001 nick :Welcome to the Internet Relay Network nick!user@pipe\r\n",
 		":bar.example.com 002 nick :Your host is bar.example.com, running version 0.0\r\n",
 		":bar.example.com 003 nick :This server was created 01/01/1970\r\n",
 		":bar.example.com 004 nick :bar.example.com 0.0 0 0\r\n",
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, serverConn := makeTestConn()
+			server := MakeServer("bar.example.com")
+			newIrcConnection(server, serverConn)
 
-	t.Run("NICK then USER", func(t *testing.T) {
-		server := MakeServer("bar.example.com")
-		state := newIrcConnection("foo.example.com")
+			writeAndFlush(client, tt.first)
+			r, _ := client.ReadString('\n')
+			assert.Equal(t, "\r\n", r)
 
-		responseChan, quitChan := handleIrcMessage(&server, &state, nick)
-		response := drainChannel(responseChan)
-		assert.Nil(t, response)
-		assert.Empty(t, quitChan)
+			writeAndFlush(client, tt.second)
 
-		responseChan, quitChan = handleIrcMessage(&server, &state, user)
-		response = drainChannel(responseChan)
-		assert.Equal(t, expected, response)
-		assert.Empty(t, quitChan)
-	})
+			response := []string{}
+			for _ = range 4 {
+				r, _ = client.ReadString('\n')
+				response = append(response, r)
+			}
 
-	t.Run("USER then NICK", func(t *testing.T) {
-		server := MakeServer("bar.example.com")
-		state := newIrcConnection("foo.example.com")
-
-		responseChan, quitChan := handleIrcMessage(&server, &state, user)
-		response := drainChannel(responseChan)
-		assert.Nil(t, response)
-		assert.Empty(t, quitChan)
-
-		responseChan, quitChan = handleIrcMessage(&server, &state, nick)
-		response = drainChannel(responseChan)
-		assert.Equal(t, expected, response)
-		assert.Empty(t, quitChan)
-	})
+			assert.Equal(t, expected, response)
+			assert.Zero(t, client.Reader.Buffered())
+		})
+	}
 }
 
 func TestNickErrors(t *testing.T) {
 	var tests = []struct {
 		name     string
 		input    string
-		expected []string
+		expected string
 	}{
-		{"ERR_NONICKNAMEGIVEN", "NICK", []string{":bar.example.com 431 :No nickname given\r\n"}},
-		// {"ERR_ERRONEUSNICKNAME", "NICK", ":bar.example.com 432 :<nick> : Erroneus nickname\r\n"},
-		{"ERR_NICKNAMEINUSE", "NICK guest", []string{":bar.example.com 433 guest :Nickname is already in use\r\n"}},
-		// {"ERR_NICKCOLLISION", "NICK", ":bar.example.com 436 guest :Nickname collision KILL from <user>@<host>\r\n"},
-		// {"ERR_UNAVAILABLERESOURCE", "NICK", ":bar.example.com 437 guest :Nick/channel is temporarily unavailable\r\n"},
-		// {"ERR_RESTRICTED", "NICK", ":bar.example.com 484 :Your connection is restricted!\r\n"},
-	}
-
-	testServer := func() (ServerInfo, connectionState) {
-		server := MakeServer("bar.example.com")
-		state := newIrcConnection("foo.example.com")
-		responseChan, _ := handleIrcMessage(&server, &state, "NICK guest")
-		<-responseChan
-		return server, state
+		{"ERR_NONICKNAMEGIVEN", "NICK\r\n", ":bar.example.com 431 :No nickname given\r\n"},
+		// {"ERR_ERRONEUSNICKNAME", "NICK\r\n", ":bar.example.com 432 :<nick> : Erroneus nickname\r\n"},
+		{"ERR_NICKNAMEINUSE", "NICK guest\r\n", ":bar.example.com 433 guest :Nickname is already in use\r\n"},
+		// {"ERR_NICKCOLLISION", "NICK\r\n", ":bar.example.com 436 guest :Nickname collision KILL from <user>@<host>\r\n"},
+		// {"ERR_UNAVAILABLERESOURCE", "NICK\r\n", ":bar.example.com 437 guest :Nick/channel is temporarily unavailable\r\n"},
+		// {"ERR_RESTRICTED", "NICK\r\n", ":bar.example.com 484 :Your connection is restricted!\r\n"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server, state := testServer()
+			server := MakeServer("bar.example.com")
 
-			responseChan, quitChan := handleIrcMessage(&server, &state, tt.input)
-			response := drainChannel(responseChan)
+			// register user
+			client, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client, "NICK guest\r\n")
+			discardResponse(client)
+
+			// start test
+			client2, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client2, tt.input)
+			response, _ := client2.ReadString('\n')
+
 			assert.Equal(t, tt.expected, response)
-			assert.Empty(t, quitChan)
+			assert.Zero(t, client.Reader.Buffered())
 		})
 	}
 }
@@ -117,106 +123,123 @@ func TestUserErrors(t *testing.T) {
 	var tests = []struct {
 		name     string
 		input    string
-		expected []string
+		expected string
 	}{
-		{"ERR_NEEDMOREPARAMS", "USER guest 0 *", []string{":bar.example.com 461 USER :Not enough parameters\r\n"}},
-		{"ERR_ALREADYREGISTERED", "USER guest 0 * :Joe Bloggs", []string{":bar.example.com 462 :Unauthorized command (already registered)\r\n"}},
-	}
-
-	testServer := func() (ServerInfo, connectionState) {
-		server := MakeServer("bar.example.com")
-		state := newIrcConnection("foo.example.com")
-		responseChan, _ := handleIrcMessage(&server, &state, "NICK guest")
-		<-responseChan
-		responseChan, _ = handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
-		<-responseChan
-		return server, state
+		{"ERR_NEEDMOREPARAMS", "USER guest 0 *\r\n", ":bar.example.com 461 USER :Not enough parameters\r\n"},
+		{"ERR_ALREADYREGISTERED", "USER guest 0 * :Joe Bloggs\r\n", ":bar.example.com 462 :Unauthorized command (already registered)\r\n"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server, state := testServer()
+			server := MakeServer("bar.example.com")
 
-			responseChan, quitChan := handleIrcMessage(&server, &state, tt.input)
+			// register user
+			client, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client, "NICK guest\r\n")
+			discardResponse(client)
+			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+			discardResponse(client)
 
-			assert.Equal(t, tt.expected, drainChannel(responseChan))
-			assert.Empty(t, quitChan)
+			writeAndFlush(client, tt.input)
+			response, _ := client.ReadString('\n')
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, client.Reader.Buffered())
 		})
 	}
 }
 
 func TestCommandsRejectedIfNotRegistered(t *testing.T) {
 	var tests = []string{
-		"QUIT",
-		"PRIVMSG",
-		"NOTICE",
-		"PING",
-		"PONG",
-		"MOTD",
-		"LUSERS",
-		"WHOIS",
+		"QUIT\r\n",
+		"PRIVMSG\r\n",
+		"NOTICE\r\n",
+		"PING\r\n",
+		"PONG\r\n",
+		"MOTD\r\n",
+		"LUSERS\r\n",
+		"WHOIS\r\n",
 	}
 
-	expected := []string{":bar.example.com 451 :You have not registered\r\n"}
+	expected := ":bar.example.com 451 :You have not registered\r\n"
 
 	for _, command := range tests {
 		t.Run(command, func(t *testing.T) {
 			server := MakeServer("bar.example.com")
-			state := newIrcConnection("foo.example.com")
-			responseChan, quitChan := handleIrcMessage(&server, &state, command)
-			assert.Equal(t, expected, drainChannel(responseChan))
-			assert.Empty(t, quitChan)
+
+			client, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client, "NICK guest\r\n")
+			discardResponse(client)
+
+			writeAndFlush(client, command)
+			response, _ := client.ReadString('\n')
+
+			assert.Equal(t, expected, response)
+			assert.Zero(t, client.Reader.Buffered())
 		})
 	}
 }
 
 func TestNickUpdatesNickName(t *testing.T) {
-	// Setup
 	server := MakeServer("bar.example.com")
-	state := newIrcConnection("foo.example.com")
-	responseChan, _ := handleIrcMessage(&server, &state, "NICK guest")
-	<-responseChan
-	responseChan, _ = handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
-	<-responseChan
 
-	// Test
-	responseChan, quitChan := handleIrcMessage(&server, &state, "NICK notguest")
-	assert.Equal(t, []string{":guest NICK notguest\r\n"}, drainChannel(responseChan))
-	assert.Empty(t, quitChan)
+	// register user
+	client, serverConn := makeTestConn()
+	newIrcConnection(server, serverConn)
+	writeAndFlush(client, "NICK guest\r\n")
+	discardResponse(client)
+	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+	discardResponse(client)
+
+	writeAndFlush(client, "NICK notguest\r\n")
+	response, _ := client.ReadString('\n')
+
+	assert.Equal(t, ":guest NICK notguest\r\n", response)
+	assert.Zero(t, client.Reader.Buffered())
 }
 
 func TestQuitEndsConnection(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []string
+		expected string
 	}{
-		{"QUIT with default message", "QUIT", []string{":bar.example.com ERROR :Closing Link: foo.example.com Client Quit\r\n"}},
-		{"QUIT with custom message", "QUIT :Gone to have lunch", []string{":bar.example.com ERROR :Closing Link: foo.example.com Gone to have lunch\r\n"}},
+		{"QUIT with default message", "QUIT\r\n", ":bar.example.com ERROR :Closing Link: pipe Client Quit\r\n"},
+		{"QUIT with custom message", "QUIT :Gone to have lunch\r\n", ":bar.example.com ERROR :Closing Link: pipe Gone to have lunch\r\n"},
 	}
 
-	testServer := func() (ServerInfo, connectionState) {
-		server := MakeServer("bar.example.com")
-		state := newIrcConnection("foo.example.com")
-		responseChan, _ := handleIrcMessage(&server, &state, "NICK guest")
-		<-responseChan
-		responseChan, _ = handleIrcMessage(&server, &state, "USER guest 0 * :Joe Bloggs")
-		<-responseChan
-
-		return server, state
-	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server, state := testServer()
+			server := MakeServer("bar.example.com")
 
-			responseChan, quitChan := handleIrcMessage(&server, &state, tt.input)
-			assert.Equal(t, tt.expected, drainChannel(responseChan))
-			assert.True(t, <-quitChan)
+			// register user
+			client, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client, "NICK guest\r\n")
+			discardResponse(client)
+			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+			discardResponse(client)
+
+			writeAndFlush(client, tt.input)
+			response, _ := client.ReadString('\n')
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, client.Reader.Buffered())
 
 			// Test that user has been unregistered by checking if we can add them again.
-			state = newIrcConnection("foo.example.com")
-			responseChan, _ = handleIrcMessage(&server, &state, "NICK guest")
-			assert.Nil(t, drainChannel(responseChan))
+			client2, serverConn2 := makeTestConn()
+			newIrcConnection(server, serverConn2)
+			writeAndFlush(client2, "NICK guest\r\n")
+			response, _ = client2.ReadString('\n')
+
+			assert.Equal(t, "\r\n", response)
+			assert.Zero(t, client2.Reader.Buffered())
+
+			//test that the connection has been shut
+			_, err := serverConn.Read([]byte{})
+			assert.NotNil(t, err)
 		})
 
 	}

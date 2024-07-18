@@ -1,6 +1,6 @@
 module server
 
-go 1.21.10
+go 1.22.5
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

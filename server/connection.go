@@ -1,26 +1,67 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"strings"
 )
 
 type connectionState struct {
+	connection net.Conn
 	nick       string
 	user       string
 	host       string
 	registered bool
 }
 
-func newIrcConnection(host string) connectionState {
-	return connectionState{
-		host: host,
+func newIrcConnection(server ServerInfo, connection net.Conn) {
+	state := connectionState{
+		connection: connection,
+		host:       connection.RemoteAddr().String(),
 	}
+
+	go func() {
+		reader := bufio.NewReader(connection)
+		writer := bufio.NewWriter(connection)
+
+		for {
+
+			// Should split on "\r\n"
+			// See https://pkg.go.dev/bufio#Scanner & implementation of SplitLine
+			// Could not get it to correctly handle EOF.
+			netData, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			// TODO: remove pointers
+			responseChan, quitChan := handleIrcMessage(&server, &state, netData)
+
+			for r := range responseChan {
+				writer.WriteString(r)
+			}
+			writer.Flush()
+
+			// fmt.Print("-> ", string(netData))
+			// t := time.Now()
+			// myTime := t.Format(time.RFC3339) + "\n"
+			select {
+			case <-quitChan:
+				connection.Close()
+				return
+			default:
+				continue
+			}
+		}
+	}()
+
 }
 
 func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (responseChan chan string, quitChan chan bool) {
 	responseChan = make(chan string)
-	quitChan = make(chan bool, 1)
+	quitChan = make(chan bool)
 
 	respondMultiple := func(response []string) {
 		for _, r := range response {
@@ -29,8 +70,6 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 	}
 
 	go func() {
-		defer close(responseChan)
-		defer close(quitChan)
 
 		command, params := tokenize(message)
 
@@ -39,8 +78,9 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 		if command == "QUIT" {
 			response, quit := handleQuit(server, state, params)
 			respondMultiple(response)
+			close(responseChan)
 			if quit {
-				quitChan <- quit
+				quitChan <- true
 			}
 			return
 		}
@@ -48,10 +88,13 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 		handler, valid_command := ircCommands[command]
 		if !valid_command {
 			responseChan <- fmt.Sprintf(":%v 421 %v :Unknown command\r\n", server.name, command)
+			close(responseChan)
 			return
 		}
 
 		respondMultiple(handler(server, state, params))
+		close(responseChan)
+		return
 	}()
 
 	return
@@ -88,7 +131,7 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 			return []string{fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])}
 		default:
 			// TODO:
-			return []string{}
+			return []string{"\r\n"}
 		}
 	}
 
@@ -102,7 +145,7 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 	}
 
 	if len(oldNick) == 0 {
-		return []string{}
+		return []string{"\r\n"}
 	} else {
 		return []string{fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)}
 	}
@@ -125,7 +168,7 @@ func handleUser(server *ServerInfo, state *connectionState, params []string) (re
 		return rplWelcome(server.name, state.nick, state.user, state.host)
 	}
 
-	return []string{}
+	return []string{"\r\n"}
 }
 
 // End the session. Should respond and then end the connection.
@@ -152,43 +195,43 @@ func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) 
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handleNotice(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handlePing(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handlePong(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handleMotd(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handleLusers(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 func handleWhois(server *ServerInfo, state *connectionState, params []string) (response []string) {
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
-	return []string{}
+	return []string{"\r\n"}
 }
 
 // func handle(server *ServerInfo, state *connectionState, params []string) (response []string) {

@@ -70,6 +70,7 @@ var updateData = [](func(*serverContext, string, []string) int){
 func setNick(context *serverContext, nick string, params []string) int {
 	// Check if nickname already registered
 	_, present := context.users[nick]
+
 	if present {
 		return ERR_NICKNAMEINUSE
 	}
