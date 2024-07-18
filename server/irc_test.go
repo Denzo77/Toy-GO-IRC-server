@@ -2,14 +2,17 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func makeTestConn() (client *bufio.ReadWriter, server net.Conn) {
 	conn, server := net.Pipe()
+	conn.SetDeadline(time.Now().Add(time.Second))
 	client = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
 	return
@@ -245,25 +248,30 @@ func TestQuitEndsConnection(t *testing.T) {
 	}
 }
 
-// func TestPrivmsg(t *testing.T) {
-// 	server := MakeServer("bar.example.com")
+func TestPrivmsg(t *testing.T) {
+	server := MakeServer("bar.example.com")
 
-// 	var newTestConn = func(nick string) (conn connectionState) {
-// 		conn = newIrcConnection("foo.example.com")
-// 		responseChan, _ := handleIrcMessage(&server, &conn, fmt.Sprintf("NICK %v", nick))
-// 		<-responseChan
-// 		responseChan, _ = handleIrcMessage(&server, &conn, fmt.Sprintf("USER %v 0 * :%v", nick, nick))
-// 		<-responseChan
-// 		return
-// 	}
+	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+		client, serverConn := makeTestConn()
+		newIrcConnection(server, serverConn)
+		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+		discardResponse(client)
+		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+		discardResponse(client)
 
-// 	sender := newTestConn("sender")
-// 	receiver := newTestConn("receiver")
+		return
+	}
 
-// 	responseChan, quitChan := handleIrcMessage(&server, &sender, "PRIVMSG receiver :This is a message")
-// 	assert.Equal(t, []string{}, drainChannel(responseChan))
-// 	assert.Empty(t, quitChan)
+	sender := newTestConn("sender")
+	receiver := newTestConn("receiver")
 
-// 	assert.Equal(t, []string{}, drainChannel(responseChan))
-// 	assert.Empty(t, quitChan)
-// }
+	println("send message")
+	writeAndFlush(sender, "PRIVMSG receiver :This is a message\r\n")
+	println("discard response")
+	discardResponse(sender)
+
+	println("check message received")
+	response, _ := receiver.ReadString('\n')
+	println("test result")
+	assert.Equal(t, ":sender PRIVMSG receiver :This is a message\r\n", response)
+}

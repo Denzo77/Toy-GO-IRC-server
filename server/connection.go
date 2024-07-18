@@ -8,10 +8,13 @@ import (
 )
 
 type connectionState struct {
-	connection net.Conn
-	nick       string
-	user       string
-	host       string
+	connection  net.Conn
+	nick        string
+	user        string
+	host        string
+	messageChan <-chan string
+	quit        chan bool
+	// get rid of this
 	registered bool
 }
 
@@ -19,14 +22,16 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 	state := connectionState{
 		connection: connection,
 		host:       connection.RemoteAddr().String(),
+		quit:       make(chan bool),
 	}
 
+	data := make(chan string)
+
+	// read/write handler
 	go func() {
 		reader := bufio.NewReader(connection)
-		writer := bufio.NewWriter(connection)
 
 		for {
-
 			// Should split on "\r\n"
 			// See https://pkg.go.dev/bufio#Scanner & implementation of SplitLine
 			// Could not get it to correctly handle EOF.
@@ -36,32 +41,44 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 				return
 			}
 
-			// TODO: remove pointers
-			responseChan, quitChan := handleIrcMessage(&server, &state, netData)
+			data <- netData
+		}
+	}()
 
-			for r := range responseChan {
-				writer.WriteString(r)
+	go func() {
+		writer := bufio.NewWriter(connection)
+
+		for {
+			select {
+			case netData := <-data:
+				// TODO: remove pointers
+				responseChan := handleIrcMessage(&server, &state, netData)
+				for r := range responseChan {
+					writer.WriteString(r)
+				}
+				writer.Flush()
+			case message := <-state.messageChan:
+				print("rx: ")
+				println(message)
+				writer.WriteString(message)
+				println("rx: flushing")
+				writer.Flush()
+				println("rx: flushed")
+			case <-state.quit:
+				connection.Close()
+				return
 			}
-			writer.Flush()
 
 			// fmt.Print("-> ", string(netData))
 			// t := time.Now()
 			// myTime := t.Format(time.RFC3339) + "\n"
-			select {
-			case <-quitChan:
-				connection.Close()
-				return
-			default:
-				continue
-			}
 		}
 	}()
 
 }
 
-func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (responseChan chan string, quitChan chan bool) {
+func handleIrcMessage(server *ServerInfo, state *connectionState, message string) (responseChan chan string) {
 	responseChan = make(chan string)
-	quitChan = make(chan bool)
 
 	respondMultiple := func(response []string) {
 		for _, r := range response {
@@ -80,7 +97,7 @@ func handleIrcMessage(server *ServerInfo, state *connectionState, message string
 			respondMultiple(response)
 			close(responseChan)
 			if quit {
-				quitChan <- true
+				state.quit <- true
 			}
 			return
 		}
@@ -125,7 +142,11 @@ func handleNick(server *ServerInfo, state *connectionState, params []string) (re
 	resultChan := make(chan int, 1)
 	server.commandChan <- Command{NICK, params[0], make([]string, 0), resultChan}
 	result := <-resultChan
-	if result != OK {
+	if result == OK {
+		messageChan := make(chan string, 1)
+		state.messageChan = messageChan
+		server.registrationChan <- Registration{params[0], messageChan}
+	} else {
 		switch result {
 		case ERR_NICKNAMEINUSE:
 			return []string{fmt.Sprintf(":%v 433 %v :Nickname is already in use\r\n", server.name, params[0])}
@@ -195,6 +216,13 @@ func handlePrivmsg(server *ServerInfo, state *connectionState, params []string) 
 	if !state.registered {
 		return errUnregistered(server.name)
 	}
+
+	message := fmt.Sprintf(":%v PRIVMSG %v :%v\r\n", state.nick, params[0], params[1])
+
+	resultChan := make(chan int, 1)
+	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
+	<-resultChan
+
 	return []string{"\r\n"}
 }
 func handleNotice(server *ServerInfo, state *connectionState, params []string) (response []string) {

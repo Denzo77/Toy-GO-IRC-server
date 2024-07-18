@@ -6,15 +6,21 @@ type serverContext struct {
 	users map[string]userInfo
 }
 
+// TODO: rename as ServerHandle?
 type ServerInfo struct {
-	name        string
-	commandChan chan<- Command
+	name string
+	// Used to receive commands from the user connection
+	commandChan      chan<- Command
+	registrationChan chan<- Registration
 }
 
 type userInfo struct {
 	user     string
 	host     string
 	realName string
+	// Used to send messages to the user connection
+	// Must be non blocking
+	channel chan<- string
 }
 
 type Command struct {
@@ -25,6 +31,11 @@ type Command struct {
 	resultChan chan int
 }
 
+type Registration struct {
+	nick        string
+	messageChan chan<- string
+}
+
 // Error values
 const (
 	OK                = 0
@@ -33,10 +44,12 @@ const (
 
 func MakeServer(serverName string) (server ServerInfo) {
 	commandChan := make(chan Command)
+	registrationChan := make(chan Registration)
 
 	server = ServerInfo{
 		serverName,
 		commandChan,
+		registrationChan,
 	}
 
 	context := serverContext{
@@ -46,8 +59,16 @@ func MakeServer(serverName string) (server ServerInfo) {
 
 	go func() {
 		for {
-			c := <-commandChan
-			c.resultChan <- updateData[c.command](&context, c.nick, c.params)
+			select {
+			case c := <-commandChan:
+				c.resultChan <- updateData[c.command](&context, c.nick, c.params)
+			case r := <-registrationChan:
+				user, present := context.users[r.nick]
+				if present {
+					user.channel = r.messageChan
+					context.users[r.nick] = user
+				}
+			}
 		}
 	}()
 
@@ -59,12 +80,14 @@ const (
 	NICK = iota
 	USER
 	QUIT
+	PRIVMSG
 )
 
 var updateData = [](func(*serverContext, string, []string) int){
 	setNick,
 	setUser,
 	unregisterUser,
+	privMsg,
 }
 
 func setNick(context *serverContext, nick string, params []string) int {
@@ -87,6 +110,14 @@ func setUser(context *serverContext, nick string, params []string) int {
 
 func unregisterUser(context *serverContext, nick string, params []string) int {
 	delete(context.users, nick)
+
+	return OK
+}
+
+func privMsg(context *serverContext, nick string, params []string) int {
+	target := params[0]
+	message := params[1]
+	context.users[target].channel <- message
 
 	return OK
 }
