@@ -155,7 +155,6 @@ func handleNick(server ServerInfo, state *connectionState, params []string) (res
 }
 
 // Additional data about the user.
-// TODO: Is this required to complete registration?
 func handleUser(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if len(params) < 4 {
 		return errNeedMoreParams(server.name, "USER")
