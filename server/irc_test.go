@@ -474,3 +474,39 @@ func TestWhois(t *testing.T) {
 	assert.Equal(t, expected, response)
 	assert.Zero(t, sender.Reader.Buffered())
 }
+
+func TestWhoisErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"No parameters does not respond", "WHOIS\r\n", "\r\n"},
+		{"ERR_NOSUCHNICK", "WHOIS foo\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client)
+
+				return
+			}
+
+			sender := newTestConn("sender")
+
+			writeAndFlush(sender, tt.input)
+			response, _ := sender.ReadString('\n')
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, sender.Reader.Buffered())
+		})
+	}
+}

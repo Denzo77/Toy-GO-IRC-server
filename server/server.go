@@ -173,13 +173,18 @@ func getNumberOfConnections(context *serverContext, nick string, params []string
 }
 
 func getHostName(context *serverContext, nick string, params []string) Response {
-	user, _ := context.users[params[0]]
-
+	user, present := context.users[params[0]]
+	if !present {
+		return Response{ERR_NOSUCHNICKNAME, ""}
+	}
 	return Response{OK, user.host}
 }
 
 func getRealName(context *serverContext, nick string, params []string) Response {
-	user, _ := context.users[params[0]]
+	user, present := context.users[params[0]]
+	if !present {
+		return Response{ERR_NOSUCHNICKNAME, ""}
+	}
 
 	return Response{OK, user.realName}
 }
