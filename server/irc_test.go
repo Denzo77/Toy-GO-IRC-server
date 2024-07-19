@@ -253,39 +253,54 @@ func TestQuitEndsConnection(t *testing.T) {
 	}
 }
 
-func TestPrivmsgReachesRecipient(t *testing.T) {
-	server := MakeServer("bar.example.com")
-
-	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
-		client, serverConn := makeTestConn()
-		newIrcConnection(server, serverConn)
-		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-		discardResponse(client)
-		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-		discardResponse(client)
-
-		return
-	}
-
-	sender := newTestConn("sender")
-	receiver := newTestConn("receiver")
-
-	writeAndFlush(sender, "PRIVMSG receiver :This is a message\r\n")
-	discardResponse(sender)
-
-	response, _ := receiver.ReadString('\n')
-	assert.Equal(t, ":sender PRIVMSG receiver :This is a message\r\n", response)
-}
-
-func TestPrivmsgErrors(t *testing.T) {
+func TestSending(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
-		{"ERR_NOSUCHNICK", "PRIVMSG foo :Message\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
-		{"ERR_NORECIPIENT", "PRIVMSG \r\n", ":bar.example.com 411 sender :No recipient given (PRIVMSG)\r\n"},
-		{"ERR_NOTEXTTOSEND", "PRIVMSG reciever\r\n", ":bar.example.com 412 sender :No text to send\r\n"},
+		{"PRIVMSG", "PRIVMSG receiver :This is a message\r\n", ":sender PRIVMSG receiver :This is a message\r\n"},
+		{"NOTICE", "NOTICE receiver :This is a message\r\n", ":sender NOTICE receiver :This is a message\r\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client)
+
+				return
+			}
+
+			sender := newTestConn("sender")
+			receiver := newTestConn("receiver")
+
+			writeAndFlush(sender, tt.input)
+			discardResponse(sender)
+
+			response, _ := receiver.ReadString('\n')
+			assert.Equal(t, tt.expected, response)
+		})
+	}
+}
+func TestMessageSendingErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"PRIVMSG returns ERR_NOSUCHNICK", "PRIVMSG foo :Message\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+		{"PRIVMSG returns ERR_NORECIPIENT", "PRIVMSG \r\n", ":bar.example.com 411 sender :No recipient given (PRIVMSG)\r\n"},
+		{"PRIVMSG returns ERR_NOTEXTTOSEND", "PRIVMSG reciever\r\n", ":bar.example.com 412 sender :No text to send\r\n"},
+		{"NOTICE does not return ERR_NOSUCHNICK", "NOTICE foo :Message\r\n", "\r\n"},
+		{"NOTICE does not return ERR_NORECIPIENT", "NOTICE \r\n", "\r\n"},
+		{"NOTICE does not return ERR_NOTEXTTOSEND", "NOTICE reciever\r\n", "\r\n"},
 	}
 
 	for _, tt := range tests {

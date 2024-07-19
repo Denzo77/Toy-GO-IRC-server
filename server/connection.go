@@ -218,6 +218,16 @@ func handleNotice(server ServerInfo, state *connectionState, params []string) (r
 	if !isRegistered(*state) {
 		return errUnregistered(server.name)
 	}
+	if len(params) < 2 {
+		return []string{"\r\n"}
+	}
+
+	message := fmt.Sprintf(":%v NOTICE %v :%v\r\n", state.nick, params[0], params[1])
+
+	resultChan := make(chan int, 1)
+	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
+	<-resultChan
+
 	return []string{"\r\n"}
 }
 func handlePing(server ServerInfo, state *connectionState, params []string) (response []string) {
