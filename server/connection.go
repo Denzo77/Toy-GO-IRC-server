@@ -255,6 +255,7 @@ func handlePing(server ServerInfo, state *connectionState, params []string) (res
 	return []string{fmt.Sprintf(":%v PONG %v %v\r\n", server.name, server.name, params[0])}
 }
 func handlePong(server ServerInfo, state *connectionState, params []string) (response []string) {
+	// TODO: Should we actually do this check?
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}

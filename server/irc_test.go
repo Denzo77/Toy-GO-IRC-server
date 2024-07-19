@@ -361,3 +361,22 @@ func TestPingingServer(t *testing.T) {
 		})
 	}
 }
+
+func TestPongingServerDoesNotRespond(t *testing.T) {
+	server := MakeServer("bar.example.com")
+
+	// register user
+	client, serverConn := makeTestConn()
+	newIrcConnection(server, serverConn)
+	writeAndFlush(client, "NICK guest\r\n")
+	discardResponse(client)
+	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+	discardResponse(client)
+
+	writeAndFlush(client, "PONG :bar.example.com\r\n")
+	response, _ := client.ReadString('\n')
+
+	assert.Equal(t, "\r\n", response)
+	assert.Zero(t, client.Reader.Buffered())
+
+}
