@@ -33,7 +33,7 @@ func TestAssert(t *testing.T) {
 }
 
 func TestUnknownCommandRespondsWithError(t *testing.T) {
-	expected := ":bar.example.com 421 FOO :Unknown command\r\n"
+	expected := ":bar.example.com 421 * FOO :Unknown command\r\n"
 
 	client, serverConn := makeTestConn()
 	server := MakeServer("bar.example.com")
@@ -93,9 +93,9 @@ func TestNickErrors(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"ERR_NONICKNAMEGIVEN", "NICK\r\n", ":bar.example.com 431 :No nickname given\r\n"},
+		{"ERR_NONICKNAMEGIVEN", "NICK\r\n", ":bar.example.com 431 * :No nickname given\r\n"},
 		// {"ERR_ERRONEUSNICKNAME", "NICK\r\n", ":bar.example.com 432 :<nick> : Erroneus nickname\r\n"},
-		{"ERR_NICKNAMEINUSE", "NICK guest\r\n", ":bar.example.com 433 guest :Nickname is already in use\r\n"},
+		{"ERR_NICKNAMEINUSE", "NICK guest\r\n", ":bar.example.com 433 * guest :Nickname is already in use\r\n"},
 		// {"ERR_NICKCOLLISION", "NICK\r\n", ":bar.example.com 436 guest :Nickname collision KILL from <user>@<host>\r\n"},
 		// {"ERR_UNAVAILABLERESOURCE", "NICK\r\n", ":bar.example.com 437 guest :Nick/channel is temporarily unavailable\r\n"},
 		// {"ERR_RESTRICTED", "NICK\r\n", ":bar.example.com 484 :Your connection is restricted!\r\n"},
@@ -133,8 +133,8 @@ func TestUserErrors(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"ERR_NEEDMOREPARAMS", "USER guest 0 *\r\n", ":bar.example.com 461 USER :Not enough parameters\r\n"},
-		{"ERR_ALREADYREGISTERED", "USER guest 0 * :Joe Bloggs\r\n", ":bar.example.com 462 :Unauthorized command (already registered)\r\n"},
+		{"ERR_NEEDMOREPARAMS", "USER guest 0 *\r\n", ":bar.example.com 461 guest USER :Not enough parameters\r\n"},
+		{"ERR_ALREADYREGISTERED", "USER guest 0 * :Joe Bloggs\r\n", ":bar.example.com 462 guest :Unauthorized command (already registered)\r\n"},
 	}
 
 	for _, tt := range tests {
@@ -170,7 +170,7 @@ func TestCommandsRejectedIfNotRegistered(t *testing.T) {
 		"WHOIS\r\n",
 	}
 
-	expected := ":bar.example.com 451 :You have not registered\r\n"
+	expected := ":bar.example.com 451 guest :You have not registered\r\n"
 
 	for _, command := range tests {
 		t.Run(command, func(t *testing.T) {
@@ -214,6 +214,7 @@ func TestQuitEndsConnection(t *testing.T) {
 		input    string
 		expected string
 	}{
+		// FIXME: Should these return the origin field (:bar.example.com)
 		{"QUIT with default message", "QUIT\r\n", ":bar.example.com ERROR :Closing Link: pipe Client Quit\r\n"},
 		{"QUIT with custom message", "QUIT :Gone to have lunch\r\n", ":bar.example.com ERROR :Closing Link: pipe Gone to have lunch\r\n"},
 	}
@@ -324,6 +325,39 @@ func TestMessageSendingErrors(t *testing.T) {
 
 			assert.Equal(t, tt.expected, response)
 			assert.Zero(t, sender.Reader.Buffered())
+		})
+	}
+}
+
+func TestPingingServer(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"replies with PONG", "PING bar.example.com\r\n", ":bar.example.com PONG bar.example.com bar.example.com\r\n"},
+		{"ERR_NEEDMOREPARAMS", "PING \r\n", ":bar.example.com 461 guest PING :Not enough parameters\r\n"},
+		// TODO: Not sure what conditions should trigger this error
+		// {"ERR_NOORIGIN", "\r\n", ":bar.example.com 409 guest :No origin specified\r\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			// register user
+			client, serverConn := makeTestConn()
+			newIrcConnection(server, serverConn)
+			writeAndFlush(client, "NICK guest\r\n")
+			discardResponse(client)
+			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+			discardResponse(client)
+
+			writeAndFlush(client, tt.input)
+			response, _ := client.ReadString('\n')
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, client.Reader.Buffered())
+
 		})
 	}
 }
