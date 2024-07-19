@@ -12,6 +12,7 @@ type connectionState struct {
 	host        string
 	nick        string
 	user        string
+	realName    string
 	messageChan <-chan string
 	quit        chan bool
 }
@@ -22,6 +23,7 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 		host:       connection.RemoteAddr().String(),
 		nick:       "",
 		user:       "",
+		realName:   "",
 		quit:       make(chan bool),
 	}
 
@@ -183,6 +185,7 @@ func handleUser(server ServerInfo, state *connectionState, params []string) (res
 	}
 
 	state.user = params[0]
+	state.realName = params[3]
 
 	if len(state.nick) == 0 {
 		return []string{"\r\n"}
@@ -197,7 +200,7 @@ func handleQuit(server ServerInfo, state *connectionState, params []string) (res
 		return errUnregistered(server.name, state.nick), false
 	}
 
-	resultChan := make(chan int, 1)
+	resultChan := make(chan Response, 1)
 	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
 	<-resultChan
 
@@ -224,10 +227,10 @@ func handlePrivmsg(server ServerInfo, state *connectionState, params []string) (
 
 	message := fmt.Sprintf(":%v PRIVMSG %v :%v\r\n", state.nick, params[0], params[1])
 
-	resultChan := make(chan int, 1)
+	resultChan := make(chan Response, 1)
 	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
 	result := <-resultChan
-	if result == ERR_NOSUCHNICKNAME {
+	if result.result == ERR_NOSUCHNICKNAME {
 		return []string{fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])}
 	}
 
@@ -243,7 +246,7 @@ func handleNotice(server ServerInfo, state *connectionState, params []string) (r
 
 	message := fmt.Sprintf(":%v NOTICE %v :%v\r\n", state.nick, params[0], params[1])
 
-	resultChan := make(chan int, 1)
+	resultChan := make(chan Response, 1)
 	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
 	<-resultChan
 
@@ -278,8 +281,8 @@ func handleLusers(server ServerInfo, state *connectionState, params []string) (r
 		return errUnregistered(server.name, state.nick)
 	}
 
-	clients := sendCommandToServer(server.commandChan, N_CONNECTIONS, state.nick, params)
-	users := sendCommandToServer(server.commandChan, N_USERS, state.nick, params)
+	clients := sendCommandToServer(server.commandChan, N_CONNECTIONS, state.nick, params).result
+	users := sendCommandToServer(server.commandChan, N_USERS, state.nick, params).result
 	invisible := 0
 	servers := 0
 	operators := 0
@@ -298,7 +301,15 @@ func handleWhois(server ServerInfo, state *connectionState, params []string) (re
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
-	return []string{"\r\n"}
+	targetNick := params[0]
+	targetHost := sendCommandToServer(server.commandChan, GET_HOST_NAME, state.nick, params[:1]).params
+	targetName := sendCommandToServer(server.commandChan, GET_REAL_NAME, state.nick, params[:1]).params
+
+	return []string{
+		fmt.Sprintf(":%v 311 %v %v %v %v :%v\r\n", server.name, state.nick, targetNick, targetNick, targetHost, targetName),
+		fmt.Sprintf(":%v 312 %v %v %v :Toy server\r\n", server.name, state.nick, targetNick, server.name),
+		fmt.Sprintf(":%v 318 %v %v :End of /WHOIS list\r\n", server.name, state.nick, targetNick),
+	}
 }
 
 // func handle(server ServerInfo, state *connectionState, params []string) (response []string) {
@@ -350,17 +361,17 @@ func tryRegister(server ServerInfo, state *connectionState, nick string) []strin
 
 	messageChan := make(chan string, 1)
 	state.messageChan = messageChan
-	server.registrationChan <- Registration{state.nick, state.user, messageChan}
+	server.registrationChan <- Registration{state.nick, state.user, state.host, state.realName, messageChan}
 	return rplWelcome(server.name, state.nick, state.user, state.host)
 }
 
 func trySetNick(server ServerInfo, client, nick string) error {
 	// Check with server
-	resultChan := make(chan int, 1)
+	resultChan := make(chan Response, 1)
 	server.commandChan <- Command{NICK, nick, make([]string, 0), resultChan}
 	result := <-resultChan
 
-	switch result {
+	switch result.result {
 	case OK:
 		return nil
 	case ERR_NICKNAMEINUSE:
@@ -371,10 +382,10 @@ func trySetNick(server ServerInfo, client, nick string) error {
 	}
 }
 
-func sendCommandToServer(channel chan<- Command, command int, nick string, params []string) (result int) {
-	resultChan := make(chan int, 1)
+func sendCommandToServer(channel chan<- Command, command int, nick string, params []string) (response Response) {
+	resultChan := make(chan Response, 1)
 	channel <- Command{command, nick, params, resultChan}
-	return <-resultChan
+	return (<-resultChan)
 }
 
 func rplWelcome(server string, nick string, user string, host string) []string {

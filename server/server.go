@@ -29,12 +29,19 @@ type Command struct {
 	nick    string
 	params  []string
 	// Must be non blocking.
-	resultChan chan int
+	responseChan chan Response
+}
+
+type Response struct {
+	result int
+	params string
 }
 
 type Registration struct {
 	nick        string
 	user        string
+	host        string
+	realName    string
 	messageChan chan<- string
 }
 
@@ -65,10 +72,13 @@ func MakeServer(serverName string) (server ServerInfo) {
 		for {
 			select {
 			case c := <-commandChan:
-				c.resultChan <- updateData[c.command](&context, c.nick, c.params)
+				c.responseChan <- updateData[c.command](&context, c.nick, c.params)
 			case r := <-registrationChan:
 				user, present := context.users[r.nick]
 				if present {
+					user.user = r.user
+					user.host = r.host
+					user.realName = r.realName
 					user.channel = r.messageChan
 					context.users[r.nick] = user
 				}
@@ -93,9 +103,11 @@ const (
 	// N_OPERATORS
 	N_CONNECTIONS
 	// N_CHANNELS
+	GET_HOST_NAME
+	GET_REAL_NAME
 )
 
-var updateData = [](func(*serverContext, string, []string) int){
+var updateData = [](func(*serverContext, string, []string) Response){
 	connectionOpened,
 	connectionClosed,
 	setNick,
@@ -107,59 +119,79 @@ var updateData = [](func(*serverContext, string, []string) int){
 	// getNumberOfOperators,
 	getNumberOfConnections,
 	// getNumberOfChannels
+	getHostName,
+	getRealName,
 }
 
-func connectionOpened(context *serverContext, nick string, params []string) int {
+func connectionOpened(context *serverContext, nick string, params []string) Response {
 	context.connections += 1
-	return OK
+	return Response{}
 }
-func connectionClosed(context *serverContext, nick string, params []string) int {
+func connectionClosed(context *serverContext, nick string, params []string) Response {
 	delete(context.users, nick)
 	context.connections -= 1
-	return OK
+	return Response{}
 }
 
-func setNick(context *serverContext, nick string, params []string) int {
+func setNick(context *serverContext, nick string, params []string) Response {
 	// Check if nickname already registered
 	_, present := context.users[nick]
 	if present {
-		return ERR_NICKNAMEINUSE
+		return Response{ERR_NICKNAMEINUSE, ""}
 	}
 
 	// if not, add nickname
 	context.users[nick] = userInfo{}
 
-	return OK
+	return Response{}
 }
 
-func setUser(context *serverContext, nick string, params []string) int {
-	return OK
+// FIXME: redundant?
+func setUser(context *serverContext, nick string, params []string) Response {
+	// user, _ := context.users[nick]
+
+	// user.user = params[0]
+	// user.realName = params[1]
+
+	return Response{}
 }
 
-func unregisterUser(context *serverContext, nick string, params []string) int {
+func unregisterUser(context *serverContext, nick string, params []string) Response {
 	delete(context.users, nick)
-	return OK
+	return Response{}
 }
 
-func privMsg(context *serverContext, nick string, params []string) int {
+func privMsg(context *serverContext, nick string, params []string) Response {
 	target := params[0]
 	message := params[1]
 
 	// Check if nickname already registered
 	_, present := context.users[target]
 	if !present {
-		return ERR_NOSUCHNICKNAME
+		return Response{ERR_NOSUCHNICKNAME, ""}
 	}
 
 	context.users[target].channel <- message
 
-	return OK
+	return Response{}
 }
 
-func getNumberOfUsers(context *serverContext, nick string, params []string) int {
-	return len(context.users)
+func getNumberOfUsers(context *serverContext, nick string, params []string) Response {
+	return Response{len(context.users), ""}
 }
 
-func getNumberOfConnections(context *serverContext, nick string, params []string) int {
-	return context.connections
+func getNumberOfConnections(context *serverContext, nick string, params []string) Response {
+	return Response{context.connections, ""}
+}
+
+func getHostName(context *serverContext, nick string, params []string) Response {
+	user, _ := context.users[params[0]]
+
+	return Response{OK, user.host}
+}
+
+func getRealName(context *serverContext, nick string, params []string) Response {
+	user, _ := context.users[params[0]]
+
+	return Response{OK, user.realName}
 }

@@ -76,7 +76,7 @@ func TestRegisterUserRespondsWithRpl(t *testing.T) {
 			writeAndFlush(client, tt.second)
 
 			response := []string{}
-			for _ = range 4 {
+			for _ = range len(expected) {
 				r, _ = client.ReadString('\n')
 				response = append(response, r)
 			}
@@ -431,7 +431,42 @@ func TestLusers(t *testing.T) {
 
 	writeAndFlush(sender, input)
 	response := []string{}
-	for _ = range 5 {
+	for _ = range len(expected) {
+		r, _ := sender.ReadString('\n')
+		response = append(response, r)
+	}
+
+	assert.Equal(t, expected, response)
+	assert.Zero(t, sender.Reader.Buffered())
+}
+
+func TestWhois(t *testing.T) {
+	input := "WHOIS guest\r\n"
+	expected := []string{
+		":bar.example.com 311 sender guest guest pipe :Joe Bloggs\r\n",
+		":bar.example.com 312 sender guest bar.example.com :Toy server\r\n",
+		":bar.example.com 318 sender guest :End of /WHOIS list\r\n",
+	}
+
+	server := MakeServer("bar.example.com")
+
+	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+		client, serverConn := makeTestConn()
+		newIrcConnection(server, serverConn)
+		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+		discardResponse(client)
+		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+		discardResponse(client)
+
+		return
+	}
+
+	sender := newTestConn("sender")
+	_ = newTestConn("guest")
+
+	writeAndFlush(sender, input)
+	response := []string{}
+	for _ = range len(expected) {
 		r, _ := sender.ReadString('\n')
 		response = append(response, r)
 	}
