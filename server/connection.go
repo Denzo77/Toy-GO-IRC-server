@@ -26,8 +26,10 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 	}
 
 	data := make(chan string)
+	sendCommandToServer(server.commandChan, CONNECTION_OPENED, "", []string{})
 
 	// read/write handler
+	// TODO: Check this quits correctly
 	go func() {
 		reader := bufio.NewReader(connection)
 
@@ -38,6 +40,7 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 			netData, err := reader.ReadString('\n')
 			if err != nil {
 				fmt.Println(err.Error())
+				state.quit <- true
 				return
 			}
 
@@ -46,6 +49,9 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 	}()
 
 	go func() {
+		// TODO: This is poorly tested
+		defer sendCommandToServer(server.commandChan, CONNECTION_CLOSED, state.nick, []string{})
+
 		writer := bufio.NewWriter(connection)
 
 		for {
@@ -271,7 +277,22 @@ func handleLusers(server ServerInfo, state *connectionState, params []string) (r
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
-	return []string{"\r\n"}
+
+	clients := sendCommandToServer(server.commandChan, N_CONNECTIONS, state.nick, params)
+	users := sendCommandToServer(server.commandChan, N_USERS, state.nick, params)
+	invisible := 0
+	servers := 0
+	operators := 0
+	unknown := clients - users
+	channels := 0
+	// FIXME: Should this be users + unknown + invisible?
+	return []string{
+		fmt.Sprintf(":%v 251 %v :There are %v users and %v invisible on %v servers\r\n", server.name, state.nick, users, invisible, servers),
+		fmt.Sprintf(":%v 252 %v %v :operator(s) online\r\n", server.name, state.nick, operators),
+		fmt.Sprintf(":%v 253 %v %v :unknown connection(s)\r\n", server.name, state.nick, unknown),
+		fmt.Sprintf(":%v 254 %v %v :channels formed\r\n", server.name, state.nick, channels),
+		fmt.Sprintf(":%v 255 %v :I have %v clients and %v servers\r\n", server.name, state.nick, clients, servers),
+	}
 }
 func handleWhois(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
@@ -348,6 +369,12 @@ func trySetNick(server ServerInfo, client, nick string) error {
 		// FIXME: This should still be an error case
 		panic(0)
 	}
+}
+
+func sendCommandToServer(channel chan<- Command, command int, nick string, params []string) (result int) {
+	resultChan := make(chan int, 1)
+	channel <- Command{command, nick, params, resultChan}
+	return <-resultChan
 }
 
 func rplWelcome(server string, nick string, user string, host string) []string {

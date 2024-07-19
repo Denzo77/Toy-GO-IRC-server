@@ -379,7 +379,7 @@ func TestPongingServerDoesNotRespond(t *testing.T) {
 	assert.Zero(t, client.Reader.Buffered())
 }
 
-func TestMOTDErrors(t *testing.T) {
+func TestMotdErrors(t *testing.T) {
 	server := MakeServer("bar.example.com")
 
 	// register user
@@ -395,4 +395,47 @@ func TestMOTDErrors(t *testing.T) {
 
 	assert.Equal(t, ":bar.example.com 422 guest :MOTD not implemented\r\n", response)
 	assert.Zero(t, client.Reader.Buffered())
+}
+
+func TestLusers(t *testing.T) {
+	input := "LUSERS\r\n"
+	expected := []string{
+		":bar.example.com 251 sender :There are 2 users and 0 invisible on 0 servers\r\n",
+		":bar.example.com 252 sender 0 :operator(s) online\r\n",
+		":bar.example.com 253 sender 1 :unknown connection(s)\r\n",
+		":bar.example.com 254 sender 0 :channels formed\r\n",
+		":bar.example.com 255 sender :I have 3 clients and 0 servers\r\n",
+	}
+
+	server := MakeServer("bar.example.com")
+
+	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+		client, serverConn := makeTestConn()
+		newIrcConnection(server, serverConn)
+		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+		discardResponse(client)
+		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+		discardResponse(client)
+
+		return
+	}
+
+	sender := newTestConn("sender")
+	_ = newTestConn("guest1")
+
+	// Incomplete registration
+	guest2, serverConn := makeTestConn()
+	newIrcConnection(server, serverConn)
+	writeAndFlush(guest2, "NICK guest2\r\n")
+	discardResponse(guest2)
+
+	writeAndFlush(sender, input)
+	response := []string{}
+	for _ = range 5 {
+		r, _ := sender.ReadString('\n')
+		response = append(response, r)
+	}
+
+	assert.Equal(t, expected, response)
+	assert.Zero(t, sender.Reader.Buffered())
 }

@@ -3,7 +3,8 @@ package main
 type serverContext struct {
 	info ServerInfo
 	// The key is the nickname
-	users map[string]userInfo
+	users       map[string]userInfo
+	connections int
 }
 
 // TODO: rename as ServerHandle?
@@ -57,6 +58,7 @@ func MakeServer(serverName string) (server ServerInfo) {
 	context := serverContext{
 		server,
 		make(map[string]userInfo),
+		0,
 	}
 
 	go func() {
@@ -79,17 +81,42 @@ func MakeServer(serverName string) (server ServerInfo) {
 
 // Commands
 const (
-	NICK = iota
+	CONNECTION_OPENED = iota
+	CONNECTION_CLOSED
+	NICK
 	USER
 	QUIT
 	PRIVMSG
+	N_USERS
+	// N_INVISIBLE
+	// N_SERVERS
+	// N_OPERATORS
+	N_CONNECTIONS
+	// N_CHANNELS
 )
 
 var updateData = [](func(*serverContext, string, []string) int){
+	connectionOpened,
+	connectionClosed,
 	setNick,
 	setUser,
 	unregisterUser,
 	privMsg,
+	getNumberOfUsers,
+	// getNumberOfInvisible,
+	// getNumberOfOperators,
+	getNumberOfConnections,
+	// getNumberOfChannels
+}
+
+func connectionOpened(context *serverContext, nick string, params []string) int {
+	context.connections += 1
+	return OK
+}
+func connectionClosed(context *serverContext, nick string, params []string) int {
+	delete(context.users, nick)
+	context.connections -= 1
+	return OK
 }
 
 func setNick(context *serverContext, nick string, params []string) int {
@@ -111,7 +138,6 @@ func setUser(context *serverContext, nick string, params []string) int {
 
 func unregisterUser(context *serverContext, nick string, params []string) int {
 	delete(context.users, nick)
-
 	return OK
 }
 
@@ -128,4 +154,12 @@ func privMsg(context *serverContext, nick string, params []string) int {
 	context.users[target].channel <- message
 
 	return OK
+}
+
+func getNumberOfUsers(context *serverContext, nick string, params []string) int {
+	return len(context.users)
+}
+
+func getNumberOfConnections(context *serverContext, nick string, params []string) int {
+	return context.connections
 }
