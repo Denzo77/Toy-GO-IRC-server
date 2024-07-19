@@ -200,9 +200,7 @@ func handleQuit(server ServerInfo, state *connectionState, params []string) (res
 		return errUnregistered(server.name, state.nick), false
 	}
 
-	resultChan := make(chan Response, 1)
-	server.commandChan <- Command{QUIT, state.nick, make([]string, 0), resultChan}
-	<-resultChan
+	sendCommandToServer(server.commandChan, QUIT, state.nick, []string{})
 
 	message := ""
 	if len(params) == 0 {
@@ -226,10 +224,8 @@ func handlePrivmsg(server ServerInfo, state *connectionState, params []string) (
 	}
 
 	message := fmt.Sprintf(":%v PRIVMSG %v :%v\r\n", state.nick, params[0], params[1])
+	result := sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
 
-	resultChan := make(chan Response, 1)
-	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
-	result := <-resultChan
 	if result.result == ERR_NOSUCHNICKNAME {
 		return []string{fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])}
 	}
@@ -245,10 +241,7 @@ func handleNotice(server ServerInfo, state *connectionState, params []string) (r
 	}
 
 	message := fmt.Sprintf(":%v NOTICE %v :%v\r\n", state.nick, params[0], params[1])
-
-	resultChan := make(chan Response, 1)
-	server.commandChan <- Command{PRIVMSG, state.nick, []string{params[0], message}, resultChan}
-	<-resultChan
+	sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
 
 	return []string{"\r\n"}
 }
@@ -367,10 +360,7 @@ func tryRegister(server ServerInfo, state *connectionState, nick string) []strin
 
 func trySetNick(server ServerInfo, client, nick string) error {
 	// Check with server
-	resultChan := make(chan Response, 1)
-	server.commandChan <- Command{NICK, nick, make([]string, 0), resultChan}
-	result := <-resultChan
-
+	result := sendCommandToServer(server.commandChan, NICK, nick, []string{})
 	switch result.result {
 	case OK:
 		return nil
