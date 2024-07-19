@@ -357,7 +357,6 @@ func TestPingingServer(t *testing.T) {
 
 			assert.Equal(t, tt.expected, response)
 			assert.Zero(t, client.Reader.Buffered())
-
 		})
 	}
 }
@@ -378,5 +377,22 @@ func TestPongingServerDoesNotRespond(t *testing.T) {
 
 	assert.Equal(t, "\r\n", response)
 	assert.Zero(t, client.Reader.Buffered())
+}
 
+func TestMOTDErrors(t *testing.T) {
+	server := MakeServer("bar.example.com")
+
+	// register user
+	client, serverConn := makeTestConn()
+	newIrcConnection(server, serverConn)
+	writeAndFlush(client, "NICK guest\r\n")
+	discardResponse(client)
+	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+	discardResponse(client)
+
+	writeAndFlush(client, "MOTD\r\n")
+	response, _ := client.ReadString('\n')
+
+	assert.Equal(t, ":bar.example.com 422 guest :MOTD not implemented\r\n", response)
+	assert.Zero(t, client.Reader.Buffered())
 }

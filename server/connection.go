@@ -265,7 +265,7 @@ func handleMotd(server ServerInfo, state *connectionState, params []string) (res
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
-	return []string{"\r\n"}
+	return []string{fmt.Sprintf(":%v 422 %v :MOTD not implemented\r\n", server.name, state.nick)}
 }
 func handleLusers(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
