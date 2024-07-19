@@ -94,7 +94,6 @@ const (
 	CONNECTION_OPENED = iota
 	CONNECTION_CLOSED
 	NICK
-	USER
 	QUIT
 	PRIVMSG
 	N_USERS
@@ -111,7 +110,6 @@ var updateData = [](func(*serverContext, string, []string) Response){
 	connectionOpened,
 	connectionClosed,
 	setNick,
-	setUser,
 	unregisterUser,
 	privMsg,
 	getNumberOfUsers,
@@ -142,16 +140,6 @@ func setNick(context *serverContext, nick string, params []string) Response {
 
 	// if not, add nickname
 	context.users[nick] = userInfo{}
-
-	return Response{}
-}
-
-// FIXME: redundant?
-func setUser(context *serverContext, nick string, params []string) Response {
-	// user, _ := context.users[nick]
-
-	// user.user = params[0]
-	// user.realName = params[1]
 
 	return Response{}
 }
