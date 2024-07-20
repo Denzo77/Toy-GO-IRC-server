@@ -168,6 +168,13 @@ func TestCommandsRejectedIfNotRegistered(t *testing.T) {
 		"MOTD\r\n",
 		"LUSERS\r\n",
 		"WHOIS\r\n",
+		"JOIN\r\n",
+		"PART\r\n",
+		"TOPIC\r\n",
+		"AWAY\r\n",
+		"NAMES\r\n",
+		"LIST\r\n",
+		"WHO\r\n",
 	}
 
 	expected := ":bar.example.com 451 guest :You have not registered\r\n"
@@ -432,6 +439,7 @@ func TestLusers(t *testing.T) {
 	writeAndFlush(sender, input)
 	response := []string{}
 	for _ = range len(expected) {
+
 		r, _ := sender.ReadString('\n')
 		response = append(response, r)
 	}
@@ -510,3 +518,74 @@ func TestWhoisErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestJoin(t *testing.T) {
+	input := "JOIN #test\r\n"
+	expected := []string{
+		":bar.example.com 332 creator #test :Test\r\n",
+		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
+		":bar.example.com 353 creator = #test :+creator\r\n",
+		":bar.example.com 366 creator #test :End of /NAMES list\r\n",
+	}
+
+	server := MakeServer("bar.example.com")
+
+	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+		client, serverConn := makeTestConn()
+		newIrcConnection(server, serverConn)
+		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+		discardResponse(client)
+		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+		discardResponse(client)
+
+		return
+	}
+
+	sender := newTestConn("creator")
+	writeAndFlush(sender, input)
+	response := []string{}
+	for _ = range len(expected) {
+		r, _ := sender.ReadString('\n')
+		response = append(response, r)
+	}
+
+	assert.Equal(t, expected, response)
+	assert.Zero(t, sender.Reader.Buffered())
+}
+
+// func TestJoinErrors(t *testing.T) {
+// 	tests := []struct {
+// 		name     string
+// 		input    string
+// 		expected string
+// 	}{
+// 		{"RPL_TOPIC", "JOIN #tardis\r\n", ":bar.example.com  \r\n"},
+// 		{"RPL_NAMREPLY", "WHOIS\r\n", ":bar.example.com  \r\n"},
+// 		{"ERR_NEEDMOREPARAMS", "WHOIS foo\r\n", ":bar.example.com 4 sender foo :No such nick/channel\r\n"},
+// 	}
+
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			server := MakeServer("bar.example.com")
+
+// 			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+// 				client, serverConn := makeTestConn()
+// 				newIrcConnection(server, serverConn)
+// 				writeAndFlush(client, "NICK guest\r\n")
+// 				discardResponse(client)
+// 				writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+// 				discardResponse(client)
+
+// 				return
+// 			}
+
+// 			sender := newTestConn("guest")
+
+// 			writeAndFlush(sender, tt.input)
+// 			response, _ := sender.ReadString('\n')
+
+// 			assert.Equal(t, tt.expected, response)
+// 			assert.Zero(t, sender.Reader.Buffered())
+// 		})
+// 	}
+// }

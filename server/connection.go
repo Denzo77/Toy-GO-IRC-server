@@ -138,6 +138,13 @@ var ircCommands = map[string](func(ServerInfo, *connectionState, []string) []str
 	"MOTD":    handleMotd,
 	"LUSERS":  handleLusers,
 	"WHOIS":   handleWhois,
+	"JOIN":    handleJoin,
+	"PART":    handlePart,
+	"TOPIC":   handleTopic,
+	"AWAY":    handleAway,
+	"NAMES":   handleNames,
+	"LIST":    handleList,
+	"WHO":     handleWho,
 }
 
 // Registers the user with a unique identifier
@@ -310,6 +317,63 @@ func handleWhois(server ServerInfo, state *connectionState, params []string) (re
 		fmt.Sprintf(":%v 312 %v %v %v :Toy server\r\n", server.name, state.nick, targetNick, server.name),
 		fmt.Sprintf(":%v 318 %v %v :End of /WHOIS list\r\n", server.name, state.nick, targetNick),
 	}
+}
+
+func handleJoin(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	channel := "#test"
+	channelState := "="
+	channelMembers := "+creator"
+	return []string{
+		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channel),
+		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channel, channelMembers),
+		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channel),
+	}
+}
+func handlePart(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
+}
+func handleTopic(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
+}
+func handleAway(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
+}
+func handleNames(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
+}
+func handleList(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
+}
+func handleWho(server ServerInfo, state *connectionState, params []string) (response []string) {
+	if !isRegistered(*state) {
+		return errUnregistered(server.name, state.nick)
+	}
+
+	return []string{"\r\n"}
 }
 
 // func handle(server ServerInfo, state *connectionState, params []string) (response []string) {
