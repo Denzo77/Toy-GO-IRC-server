@@ -521,12 +521,6 @@ func TestWhoisErrors(t *testing.T) {
 
 func TestJoin(t *testing.T) {
 	input := "JOIN #test\r\n"
-	expected := []string{
-		":bar.example.com 332 creator #test :Test\r\n",
-		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
-		":bar.example.com 353 creator = #test :+creator\r\n",
-		":bar.example.com 366 creator #test :End of /NAMES list\r\n",
-	}
 
 	server := MakeServer("bar.example.com")
 
@@ -541,16 +535,40 @@ func TestJoin(t *testing.T) {
 		return
 	}
 
-	sender := newTestConn("creator")
-	writeAndFlush(sender, input)
-	response := []string{}
-	for _ = range len(expected) {
-		r, _ := sender.ReadString('\n')
-		response = append(response, r)
+	// Channel creation
+	expected := []string{
+		":bar.example.com 332 creator #test :Test\r\n",
+		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
+		":bar.example.com 353 creator = #test :+creator\r\n",
+		":bar.example.com 366 creator #test :End of /NAMES list\r\n",
 	}
+	creator := newTestConn("creator")
+	writeAndFlush(creator, input)
+	for _, e := range expected {
+		r, _ := creator.ReadString('\n')
+		assert.Equal(t, e, r)
+	}
+	assert.Zero(t, creator.Reader.Buffered())
 
-	assert.Equal(t, expected, response)
-	assert.Zero(t, sender.Reader.Buffered())
+	// Another user joins
+	expected = []string{
+		":bar.example.com 332 guest #test :Test\r\n",
+		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
+		":bar.example.com 353 guest = #test :+creator +guest\r\n",
+		":bar.example.com 366 guest #test :End of /NAMES list\r\n",
+	}
+	guest := newTestConn("guest")
+	writeAndFlush(guest, input)
+	for _, e := range expected {
+		r, _ := guest.ReadString('\n')
+		assert.Equal(t, e, r)
+	}
+	assert.Zero(t, guest.Reader.Buffered())
+
+	// Check message to creator
+	r, _ := creator.ReadString('\n')
+	assert.Equal(t, ":guest JOIN #test\r\n", r)
+	assert.Zero(t, creator.Reader.Buffered())
 }
 
 // func TestJoinErrors(t *testing.T) {

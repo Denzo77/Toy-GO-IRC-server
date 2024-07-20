@@ -324,13 +324,15 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 		return errUnregistered(server.name, state.nick)
 	}
 
-	channel := "#test"
+	channelName := params[0]
+	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params)
+
 	channelState := "="
-	channelMembers := "+creator"
+	channelMembers = strings.TrimSpace(channelMembers)
 	return []string{
-		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channel),
-		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channel, channelMembers),
-		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channel),
+		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
+		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
+		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),
 	}
 }
 func handlePart(server ServerInfo, state *connectionState, params []string) (response []string) {

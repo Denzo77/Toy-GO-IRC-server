@@ -1,9 +1,15 @@
 package main
 
+import (
+	"fmt"
+	"strings"
+)
+
 type serverContext struct {
 	info ServerInfo
 	// The key is the nickname
 	users       map[string]userInfo
+	channels    map[string]channelInfo
 	connections int
 }
 
@@ -22,6 +28,14 @@ type userInfo struct {
 	// Used to send messages to the user connection
 	// Must be non blocking
 	channel chan<- string
+}
+
+type channelInfo struct {
+	members map[string]channelMember
+}
+
+type channelMember struct {
+	mode byte
 }
 
 type Command struct {
@@ -65,6 +79,7 @@ func MakeServer(serverName string) (server ServerInfo) {
 	context := serverContext{
 		server,
 		make(map[string]userInfo),
+		make(map[string]channelInfo),
 		0,
 	}
 
@@ -104,6 +119,7 @@ const (
 	// N_CHANNELS
 	GET_HOST_NAME
 	GET_REAL_NAME
+	JOIN
 )
 
 var updateData = [](func(*serverContext, string, []string) Response){
@@ -119,6 +135,7 @@ var updateData = [](func(*serverContext, string, []string) Response){
 	// getNumberOfChannels
 	getHostName,
 	getRealName,
+	userJoin,
 }
 
 func connectionOpened(context *serverContext, nick string, params []string) Response {
@@ -187,4 +204,41 @@ func getRealName(context *serverContext, nick string, params []string) Response 
 	}
 
 	return Response{OK, user.realName}
+}
+
+func userJoin(context *serverContext, nick string, params []string) Response {
+	channelName := params[0]
+	member := channelMember{'+'}
+
+	channel, present := context.channels[channelName]
+	if !present {
+		members := make(map[string]channelMember)
+		members[nick] = member
+		context.channels[channelName] = channelInfo{members}
+
+		membersString := fmt.Sprintf("%c%v", member.mode, nick)
+		return Response{OK, membersString}
+	}
+
+	for k := range channel.members {
+		context.users[k].channel <- fmt.Sprintf(":%v JOIN %v\r\n", nick, params[0])
+	}
+
+	// Add member after notifying other channel members
+	// to avoid unnecessarily messaging this user.
+	channel.members[nick] = member
+
+	return Response{OK, getMemberList(&channel)}
+}
+
+// utility funcs
+func getMemberList(c *channelInfo) string {
+	var members strings.Builder
+	for k, v := range c.members {
+		members.WriteByte(v.mode)
+		members.WriteString(k)
+		members.WriteRune(' ')
+	}
+
+	return members.String()
 }
