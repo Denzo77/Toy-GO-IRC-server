@@ -561,7 +561,7 @@ func TestJoin(t *testing.T) {
 	writeAndFlush(guest, input)
 	for _, e := range expected {
 		r, _ := guest.ReadString('\n')
-		assert.Equal(t, e, r)
+		assert.Equal(t, e, r, "Note may fail spuriously due to '+creator' and '+guest' being swapped")
 	}
 	assert.Zero(t, guest.Reader.Buffered())
 
@@ -571,39 +571,37 @@ func TestJoin(t *testing.T) {
 	assert.Zero(t, creator.Reader.Buffered())
 }
 
-// func TestJoinErrors(t *testing.T) {
-// 	tests := []struct {
-// 		name     string
-// 		input    string
-// 		expected string
-// 	}{
-// 		{"RPL_TOPIC", "JOIN #tardis\r\n", ":bar.example.com  \r\n"},
-// 		{"RPL_NAMREPLY", "WHOIS\r\n", ":bar.example.com  \r\n"},
-// 		{"ERR_NEEDMOREPARAMS", "WHOIS foo\r\n", ":bar.example.com 4 sender foo :No such nick/channel\r\n"},
-// 	}
+func TestJoinErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"ERR_NEEDMOREPARAMS", "JOIN \r\n", ":bar.example.com 461 guest JOIN :Not enough parameters\r\n"},
+	}
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			server := MakeServer("bar.example.com")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
 
-// 			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
-// 				client, serverConn := makeTestConn()
-// 				newIrcConnection(server, serverConn)
-// 				writeAndFlush(client, "NICK guest\r\n")
-// 				discardResponse(client)
-// 				writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-// 				discardResponse(client)
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, "NICK guest\r\n")
+				discardResponse(client)
+				writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
+				discardResponse(client)
 
-// 				return
-// 			}
+				return
+			}
 
-// 			sender := newTestConn("guest")
+			sender := newTestConn("guest")
 
-// 			writeAndFlush(sender, tt.input)
-// 			response, _ := sender.ReadString('\n')
+			writeAndFlush(sender, tt.input)
+			response, _ := sender.ReadString('\n')
 
-// 			assert.Equal(t, tt.expected, response)
-// 			assert.Zero(t, sender.Reader.Buffered())
-// 		})
-// 	}
-// }
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, sender.Reader.Buffered())
+		})
+	}
+}

@@ -323,6 +323,9 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
+	if len(params) < 1 {
+		return errNeedMoreParams(server.name, state.nick, "JOIN")
+	}
 
 	channelName := params[0]
 	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params)
