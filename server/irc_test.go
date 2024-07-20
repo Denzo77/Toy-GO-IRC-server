@@ -544,10 +544,12 @@ func TestJoin(t *testing.T) {
 	}
 	creator := newTestConn("creator")
 	writeAndFlush(creator, input)
-	for _, e := range expected {
+	response := []string{}
+	for _ = range len(expected) {
 		r, _ := creator.ReadString('\n')
-		assert.Equal(t, e, r)
+		response = append(response, r)
 	}
+	assert.Equal(t, expected, response)
 	assert.Zero(t, creator.Reader.Buffered())
 
 	// Another user joins
@@ -559,10 +561,12 @@ func TestJoin(t *testing.T) {
 	}
 	guest := newTestConn("guest")
 	writeAndFlush(guest, input)
-	for _, e := range expected {
+	response = []string{}
+	for _ = range len(expected) {
 		r, _ := guest.ReadString('\n')
-		assert.Equal(t, e, r, "Note may fail spuriously due to '+creator' and '+guest' being swapped")
+		response = append(response, r)
 	}
+	assert.Equal(t, expected, response, "Note may fail spuriously due to '+creator' and '+guest' being swapped")
 	assert.Zero(t, guest.Reader.Buffered())
 
 	// Check message to creator
