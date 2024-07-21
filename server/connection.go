@@ -333,6 +333,7 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 	channelState := "="
 	channelMembers = strings.TrimSpace(channelMembers)
 	return []string{
+		fmt.Sprintf(":%v JOIN %v\r\n", state.nick, channelName),
 		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
 		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
 		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),

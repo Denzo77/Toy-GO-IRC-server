@@ -213,19 +213,14 @@ func userJoin(context *serverContext, nick string, params []string) Response {
 	channel, present := context.channels[channelName]
 	if !present {
 		members := make(map[string]channelMember)
-		members[nick] = member
 		context.channels[channelName] = channelInfo{members}
-
-		membersString := fmt.Sprintf("%c%v", member.mode, nick)
-		return Response{OK, membersString}
 	}
+	channel, _ = context.channels[channelName]
 
 	for k := range channel.members {
 		context.users[k].channel <- fmt.Sprintf(":%v JOIN %v\r\n", nick, params[0])
 	}
 
-	// Add member after notifying other channel members
-	// to avoid unnecessarily messaging this user.
 	channel.members[nick] = member
 
 	return Response{OK, getMemberList(&channel)}

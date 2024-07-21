@@ -537,6 +537,7 @@ func TestJoin(t *testing.T) {
 
 	// Channel creation
 	expected := []string{
+		":creator JOIN #test\r\n",
 		":bar.example.com 332 creator #test :Test\r\n",
 		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
 		":bar.example.com 353 creator = #test :+creator\r\n",
@@ -554,6 +555,7 @@ func TestJoin(t *testing.T) {
 
 	// Another user joins
 	expected = []string{
+		":guest JOIN #test\r\n",
 		":bar.example.com 332 guest #test :Test\r\n",
 		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
 		":bar.example.com 353 guest = #test :+creator +guest\r\n",
