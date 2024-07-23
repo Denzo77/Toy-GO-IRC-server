@@ -217,8 +217,13 @@ func userJoin(context *serverContext, nick string, params []string) Response {
 	}
 	channel, _ = context.channels[channelName]
 
+	// FIXME: Refactor this
+	user := params[1]
+	host := params[2]
+	message := fmt.Sprintf(":%v!%v@%v JOIN %v\r\n", nick, user, host, params[0])
+
 	for k := range channel.members {
-		context.users[k].channel <- fmt.Sprintf(":%v JOIN %v\r\n", nick, params[0])
+		context.users[k].channel <- message
 	}
 
 	channel.members[nick] = member

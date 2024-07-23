@@ -13,21 +13,21 @@ type connectionState struct {
 	nick        string
 	user        string
 	realName    string
-	messageChan <-chan string
+	messageChan chan string
 	quit        chan bool
 }
 
 func newIrcConnection(server ServerInfo, connection net.Conn) {
 	state := connectionState{
-		connection: connection,
-		host:       connection.RemoteAddr().String(),
-		nick:       "",
-		user:       "",
-		realName:   "",
-		quit:       make(chan bool),
+		connection:  connection,
+		host:        connection.RemoteAddr().String(),
+		nick:        "",
+		user:        "",
+		realName:    "",
+		messageChan: make(chan string, 1),
+		quit:        make(chan bool),
 	}
 
-	data := make(chan string)
 	sendCommandToServer(server.commandChan, CONNECTION_OPENED, "", []string{})
 
 	// read/write handler
@@ -46,7 +46,11 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 				return
 			}
 
-			data <- netData
+			// TODO: remove pointers
+			_ = handleIrcMessage(server, &state, netData)
+			// for r := range responseChan {
+			// 	state.messageChan <- r
+			// }
 		}
 	}()
 
@@ -58,13 +62,6 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 
 		for {
 			select {
-			case netData := <-data:
-				// TODO: remove pointers
-				responseChan := handleIrcMessage(server, &state, netData)
-				for r := range responseChan {
-					writer.WriteString(r)
-				}
-				writer.Flush()
 			case message := <-state.messageChan:
 				writer.WriteString(message)
 				writer.Flush()
@@ -82,24 +79,20 @@ func newIrcConnection(server ServerInfo, connection net.Conn) {
 }
 
 func handleIrcMessage(server ServerInfo, state *connectionState, message string) (responseChan chan string) {
-	responseChan = make(chan string)
-
-	respondMultiple := func(response []string) {
+	respondMultiple := func(channel chan<- string, response []string) {
 		for _, r := range response {
-			responseChan <- r
+			channel <- r
 		}
 	}
 
 	go func() {
-
 		command, params := tokenize(message)
 
 		// Slightly hacky special case to avoid editing all command handlers
 		// TODO: May need to change anyway in the future.
 		if command == "QUIT" {
 			response, quit := handleQuit(server, state, params)
-			respondMultiple(response)
-			close(responseChan)
+			respondMultiple(state.messageChan, response)
 			if quit {
 				state.quit <- true
 			}
@@ -112,13 +105,11 @@ func handleIrcMessage(server ServerInfo, state *connectionState, message string)
 			if len(nick) == 0 {
 				nick = "*"
 			}
-			responseChan <- fmt.Sprintf(":%v 421 %v %v :Unknown command\r\n", server.name, nick, command)
-			close(responseChan)
+			state.messageChan <- fmt.Sprintf(":%v 421 %v %v :Unknown command\r\n", server.name, nick, command)
 			return
 		}
 
-		respondMultiple(handler(server, state, params))
-		close(responseChan)
+		respondMultiple(state.messageChan, handler(server, state, params))
 		return
 	}()
 
@@ -230,7 +221,7 @@ func handlePrivmsg(server ServerInfo, state *connectionState, params []string) (
 		return []string{fmt.Sprintf(":%v 412 %v :No text to send\r\n", server.name, state.nick)}
 	}
 
-	message := fmt.Sprintf(":%v PRIVMSG %v :%v\r\n", state.nick, params[0], params[1])
+	message := fmt.Sprintf(":%v!%v@%v PRIVMSG %v :%v\r\n", state.nick, state.user, state.host, params[0], params[1])
 	result, _ := sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
 
 	if result == ERR_NOSUCHNICKNAME {
@@ -247,7 +238,7 @@ func handleNotice(server ServerInfo, state *connectionState, params []string) (r
 		return []string{"\r\n"}
 	}
 
-	message := fmt.Sprintf(":%v NOTICE %v :%v\r\n", state.nick, params[0], params[1])
+	message := fmt.Sprintf(":%v!%v@%v NOTICE %v :%v\r\n", state.nick, state.user, state.host, params[0], params[1])
 	sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
 
 	return []string{"\r\n"}
@@ -328,12 +319,17 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 	}
 
 	channelName := params[0]
+	params = []string{
+		channelName,
+		state.user,
+		state.host,
+	}
 	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params)
 
 	channelState := "="
 	channelMembers = strings.TrimSpace(channelMembers)
 	return []string{
-		fmt.Sprintf(":%v JOIN %v\r\n", state.nick, channelName),
+		fmt.Sprintf(":%v!%v@%v JOIN %v\r\n", state.nick, state.user, state.host, channelName),
 		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
 		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
 		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),
@@ -429,9 +425,7 @@ func tryRegister(server ServerInfo, state *connectionState, nick string) []strin
 
 	state.nick = nick
 
-	messageChan := make(chan string, 1)
-	state.messageChan = messageChan
-	server.registrationChan <- Registration{state.nick, state.user, state.host, state.realName, messageChan}
+	server.registrationChan <- Registration{state.nick, state.user, state.host, state.realName, state.messageChan}
 	return rplWelcome(server.name, state.nick, state.user, state.host)
 }
 

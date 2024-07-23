@@ -23,8 +23,11 @@ func writeAndFlush(writer *bufio.ReadWriter, s string) {
 	writer.Flush()
 }
 
-func discardResponse(reader *bufio.ReadWriter) {
-	reader.ReadString('\n')
+func discardResponse(reader *bufio.ReadWriter, min_number uint) {
+	for _ = range min_number {
+		reader.ReadString('\n')
+	}
+
 	reader.Reader.Discard(reader.Reader.Buffered())
 }
 
@@ -109,15 +112,15 @@ func TestNickErrors(t *testing.T) {
 			client, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
-			discardResponse(client)
+			discardResponse(client, 1)
 			writeAndFlush(client, "USER 0 * guest :Joe Blogs\r\n")
-			discardResponse(client)
+			discardResponse(client, 4)
 
 			// start test
 			client2, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client2, "USER 0 * guest :Joe Blogs\r\n")
-			discardResponse(client2)
+			discardResponse(client2, 1)
 			writeAndFlush(client2, tt.input)
 			response, _ := client2.ReadString('\n')
 
@@ -145,9 +148,9 @@ func TestUserErrors(t *testing.T) {
 			client, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
-			discardResponse(client)
+			discardResponse(client, 1)
 			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-			discardResponse(client)
+			discardResponse(client, 4)
 
 			writeAndFlush(client, tt.input)
 			response, _ := client.ReadString('\n')
@@ -186,7 +189,7 @@ func TestCommandsRejectedIfNotRegistered(t *testing.T) {
 			client, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
-			discardResponse(client)
+			discardResponse(client, 1)
 
 			writeAndFlush(client, command)
 			response, _ := client.ReadString('\n')
@@ -204,9 +207,9 @@ func TestNickUpdatesNickName(t *testing.T) {
 	client, serverConn := makeTestConn()
 	newIrcConnection(server, serverConn)
 	writeAndFlush(client, "NICK guest\r\n")
-	discardResponse(client)
+	discardResponse(client, 1)
 	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-	discardResponse(client)
+	discardResponse(client, 4)
 
 	writeAndFlush(client, "NICK notguest\r\n")
 	response, _ := client.ReadString('\n')
@@ -234,9 +237,9 @@ func TestQuitEndsConnection(t *testing.T) {
 			client, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
-			discardResponse(client)
+			discardResponse(client, 1)
 			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-			discardResponse(client)
+			discardResponse(client, 4)
 
 			writeAndFlush(client, tt.input)
 			response, _ := client.ReadString('\n')
@@ -267,8 +270,8 @@ func TestSending(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"PRIVMSG", "PRIVMSG receiver :This is a message\r\n", ":sender PRIVMSG receiver :This is a message\r\n"},
-		{"NOTICE", "NOTICE receiver :This is a message\r\n", ":sender NOTICE receiver :This is a message\r\n"},
+		{"PRIVMSG", "PRIVMSG receiver :This is a message\r\n", ":sender!sender@pipe PRIVMSG receiver :This is a message\r\n"},
+		{"NOTICE", "NOTICE receiver :This is a message\r\n", ":sender!sender@pipe NOTICE receiver :This is a message\r\n"},
 	}
 
 	for _, tt := range tests {
@@ -279,9 +282,9 @@ func TestSending(t *testing.T) {
 				client, serverConn := makeTestConn()
 				newIrcConnection(server, serverConn)
 				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 1)
 				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 4)
 
 				return
 			}
@@ -290,7 +293,7 @@ func TestSending(t *testing.T) {
 			receiver := newTestConn("receiver")
 
 			writeAndFlush(sender, tt.input)
-			discardResponse(sender)
+			discardResponse(sender, 1)
 
 			response, _ := receiver.ReadString('\n')
 			assert.Equal(t, tt.expected, response)
@@ -319,9 +322,9 @@ func TestMessageSendingErrors(t *testing.T) {
 				client, serverConn := makeTestConn()
 				newIrcConnection(server, serverConn)
 				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 1)
 				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 4)
 
 				return
 			}
@@ -355,9 +358,9 @@ func TestPingingServer(t *testing.T) {
 			client, serverConn := makeTestConn()
 			newIrcConnection(server, serverConn)
 			writeAndFlush(client, "NICK guest\r\n")
-			discardResponse(client)
+			discardResponse(client, 1)
 			writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-			discardResponse(client)
+			discardResponse(client, 4)
 
 			writeAndFlush(client, tt.input)
 			response, _ := client.ReadString('\n')
@@ -375,9 +378,9 @@ func TestPongingServerDoesNotRespond(t *testing.T) {
 	client, serverConn := makeTestConn()
 	newIrcConnection(server, serverConn)
 	writeAndFlush(client, "NICK guest\r\n")
-	discardResponse(client)
+	discardResponse(client, 1)
 	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-	discardResponse(client)
+	discardResponse(client, 4)
 
 	writeAndFlush(client, "PONG :bar.example.com\r\n")
 	response, _ := client.ReadString('\n')
@@ -393,9 +396,9 @@ func TestMotdErrors(t *testing.T) {
 	client, serverConn := makeTestConn()
 	newIrcConnection(server, serverConn)
 	writeAndFlush(client, "NICK guest\r\n")
-	discardResponse(client)
+	discardResponse(client, 1)
 	writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-	discardResponse(client)
+	discardResponse(client, 4)
 
 	writeAndFlush(client, "MOTD\r\n")
 	response, _ := client.ReadString('\n')
@@ -420,9 +423,9 @@ func TestLusers(t *testing.T) {
 		client, serverConn := makeTestConn()
 		newIrcConnection(server, serverConn)
 		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 1)
 		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 4)
 
 		return
 	}
@@ -434,7 +437,7 @@ func TestLusers(t *testing.T) {
 	guest2, serverConn := makeTestConn()
 	newIrcConnection(server, serverConn)
 	writeAndFlush(guest2, "NICK guest2\r\n")
-	discardResponse(guest2)
+	discardResponse(guest2, 1)
 
 	writeAndFlush(sender, input)
 	response := []string{}
@@ -462,9 +465,9 @@ func TestWhois(t *testing.T) {
 		client, serverConn := makeTestConn()
 		newIrcConnection(server, serverConn)
 		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 1)
 		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 4)
 
 		return
 	}
@@ -501,9 +504,9 @@ func TestWhoisErrors(t *testing.T) {
 				client, serverConn := makeTestConn()
 				newIrcConnection(server, serverConn)
 				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 1)
 				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-				discardResponse(client)
+				discardResponse(client, 4)
 
 				return
 			}
@@ -528,16 +531,16 @@ func TestJoin(t *testing.T) {
 		client, serverConn := makeTestConn()
 		newIrcConnection(server, serverConn)
 		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 1)
 		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-		discardResponse(client)
+		discardResponse(client, 4)
 
 		return
 	}
 
 	// Channel creation
 	expected := []string{
-		":creator JOIN #test\r\n",
+		":creator!creator@pipe JOIN #test\r\n",
 		":bar.example.com 332 creator #test :Test\r\n",
 		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
 		":bar.example.com 353 creator = #test :+creator\r\n",
@@ -555,7 +558,7 @@ func TestJoin(t *testing.T) {
 
 	// Another user joins
 	expected = []string{
-		":guest JOIN #test\r\n",
+		":guest!guest@pipe JOIN #test\r\n",
 		":bar.example.com 332 guest #test :Test\r\n",
 		// ":bar.example.com 333 creator #test creator <timestamp>\r\n", // TODO: RPL_TOPICWHOTIME
 		":bar.example.com 353 guest = #test :+creator +guest\r\n",
@@ -573,7 +576,7 @@ func TestJoin(t *testing.T) {
 
 	// Check message to creator
 	r, _ := creator.ReadString('\n')
-	assert.Equal(t, ":guest JOIN #test\r\n", r)
+	assert.Equal(t, ":guest!guest@pipe JOIN #test\r\n", r)
 	assert.Zero(t, creator.Reader.Buffered())
 }
 
@@ -594,9 +597,9 @@ func TestJoinErrors(t *testing.T) {
 				client, serverConn := makeTestConn()
 				newIrcConnection(server, serverConn)
 				writeAndFlush(client, "NICK guest\r\n")
-				discardResponse(client)
+				discardResponse(client, 1)
 				writeAndFlush(client, "USER guest 0 * :Joe Bloggs\r\n")
-				discardResponse(client)
+				discardResponse(client, 4)
 
 				return
 			}
