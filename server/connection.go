@@ -319,12 +319,8 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 	}
 
 	channelName := params[0]
-	params = []string{
-		channelName,
-		state.user,
-		state.host,
-	}
-	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params)
+
+	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
 
 	channelState := "="
 	channelMembers = strings.TrimSpace(channelMembers)
