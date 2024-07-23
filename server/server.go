@@ -220,11 +220,11 @@ func userJoin(context *serverContext, nick string, params []string) Response {
 	user, _ := context.users[nick]
 	message := fmt.Sprintf(":%v!%v@%v JOIN %v\r\n", nick, user.user, user.host, params[0])
 
+	channel.members[nick] = member
+
 	for k := range channel.members {
 		context.users[k].channel <- message
 	}
-
-	channel.members[nick] = member
 
 	return Response{OK, getMemberList(&channel)}
 }
