@@ -306,7 +306,8 @@ func TestMessageSendingErrors(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"PRIVMSG returns ERR_NOSUCHNICK", "PRIVMSG foo :Message\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+		{"PRIVMSG returns ERR_NOSUCHNICK when unknown nick", "PRIVMSG foo :Message\r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+		{"PRIVMSG returns ERR_NOSUCHNICK when unknown channel", "PRIVMSG #test :Message\r\n", ":bar.example.com 401 sender #test :No such nick/channel\r\n"},
 		{"PRIVMSG returns ERR_NORECIPIENT", "PRIVMSG \r\n", ":bar.example.com 411 sender :No recipient given (PRIVMSG)\r\n"},
 		{"PRIVMSG returns ERR_NOTEXTTOSEND", "PRIVMSG reciever\r\n", ":bar.example.com 412 sender :No text to send\r\n"},
 		{"NOTICE does not return ERR_NOSUCHNICK", "NOTICE foo :Message\r\n", "\r\n"},

@@ -170,13 +170,28 @@ func privMsg(context *serverContext, nick string, params []string) Response {
 	target := params[0]
 	message := params[1]
 
-	// Check if nickname already registered
-	_, present := context.users[target]
-	if !present {
-		return Response{ERR_NOSUCHNICKNAME, ""}
-	}
+	targetType := target[0]
+	switch targetType {
+	case '&', '#', '+', '!':
+		// send to channels
+		_, present := context.channels[target]
+		if !present {
+			return Response{ERR_NOSUCHNICKNAME, ""}
+		}
 
-	context.users[target].channel <- message
+		// for k := range channel.members {
+		// 	context.users[k].channel <- message
+		// }
+	default:
+		// send to user
+		// Check if nickname already registered
+		user, present := context.users[target]
+		if !present {
+			return Response{ERR_NOSUCHNICKNAME, ""}
+		}
+
+		user.channel <- message
+	}
 
 	return Response{}
 }
