@@ -272,8 +272,9 @@ func userPart(context *serverContext, nick string, params []string) Response {
 		context.users[k].channel <- message
 	}
 
-	// FIXME:
+	// FIXME: Remove user from channel
 	// delete(channel.members, nick)
+	// FIXME: If no users left, delete channel
 
 	return Response{}
 }
