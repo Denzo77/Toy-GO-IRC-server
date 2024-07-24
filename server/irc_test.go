@@ -618,7 +618,7 @@ func TestJoin(t *testing.T) {
 		r, _ := guest.ReadString('\n')
 		response = append(response, r)
 	}
-	assert.Equal(t, expected, response, "Note may fail spuriously due to '+creator' and '+guest' being swapped")
+	assert.Equal(t, expected, response)
 	assert.Zero(t, guest.Reader.Buffered())
 
 	// Check message to creator
