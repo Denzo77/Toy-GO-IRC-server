@@ -717,8 +717,9 @@ func TestPartErrors(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"ERR_NOSUCHCHANNEL", "PART #foo\r\n", ":bar.example.com 403 creator #foo :No such channel\r\n"},
-		// {"ERR_NOTONCHANNEL", "PART \r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+		{"ERR_NOSUCHCHANNEL", "PART #foo\r\n", ":bar.example.com 403 guest #foo :No such channel\r\n"},
+		{"ERR_NOTONCHANNEL", "PART #test\r\n", ":bar.example.com 441 guest #test :You're not on that channel\r\n"},
+		{"ERR_NEEDMOREPARAMS", "PART \r\n", ":bar.example.com 461 guest PART :Not enough parameters\r\n"},
 	}
 
 	for _, tt := range tests {
@@ -738,14 +739,16 @@ func TestPartErrors(t *testing.T) {
 
 			// Setup
 			creator := newTestConn("creator")
-			writeAndFlush(creator, "JOIN #test,#test2\r\n")
+			writeAndFlush(creator, "JOIN #test\r\n")
 			discardResponse(creator, 4)
 
-			// User leaves
-			writeAndFlush(creator, tt.input)
-			r, _ := creator.ReadString('\n')
+			guest := newTestConn("guest")
+
+			// User tries to leave
+			writeAndFlush(guest, tt.input)
+			r, _ := guest.ReadString('\n')
 			assert.Equal(t, tt.expected, r)
-			assert.Zero(t, creator.Reader.Buffered())
+			assert.Zero(t, guest.Reader.Buffered())
 		})
 	}
 }

@@ -334,12 +334,16 @@ func handlePart(server ServerInfo, state *connectionState, params []string) (res
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
-
+	if len(params) < 1 {
+		return errNeedMoreParams(server.name, state.nick, "PART")
+	}
 	result, _ := sendCommandToServer(server.commandChan, PART, state.nick, params)
 
+	channel := params[0]
 	if result == ERR_NOSUCHCHANNEL {
-		channel := params[0]
 		return []string{fmt.Sprintf(":%v 403 %v %v :No such channel\r\n", server.name, state.nick, channel)}
+	} else if result == ERR_NOTONCHANNEL {
+		return []string{fmt.Sprintf(":%v 441 %v %v :You're not on that channel\r\n", server.name, state.nick, channel)}
 	}
 
 	return []string{"\r\n"}

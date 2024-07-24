@@ -65,6 +65,7 @@ const (
 	ERR_NOSUCHNICKNAME = 401
 	ERR_NOSUCHCHANNEL  = 403
 	ERR_NICKNAMEINUSE  = 433
+	ERR_NOTONCHANNEL   = 441
 )
 
 func MakeServer(serverName string) (server ServerInfo) {
@@ -251,17 +252,22 @@ func userPart(context *serverContext, nick string, params []string) Response {
 	channelName := params[0]
 
 	user, _ := context.users[nick]
+	channel, present := context.channels[channelName]
+	if !present {
+		return Response{ERR_NOSUCHCHANNEL, ""}
+	}
+
+	_, present = channel.members[nick]
+	if !present {
+		return Response{ERR_NOTONCHANNEL, ""}
+	}
+
 	var message string
 	if len(params) == 1 {
 		message = fmt.Sprintf(":%v!%v@%v PART %v\r\n", nick, user.user, user.host, params[0])
 	} else {
 		message = fmt.Sprintf(":%v!%v@%v PART %v :%v\r\n", nick, user.user, user.host, params[0], params[1])
 	}
-	channel, present := context.channels[channelName]
-	if !present {
-		return Response{ERR_NOSUCHCHANNEL, ""}
-	}
-
 	for k := range channel.members {
 		context.users[k].channel <- message
 	}
