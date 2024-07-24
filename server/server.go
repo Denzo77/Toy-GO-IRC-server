@@ -123,6 +123,7 @@ const (
 	GET_REAL_NAME
 	JOIN
 	PART
+	NAMES
 )
 
 var updateData = [](func(*serverContext, string, []string) Response){
@@ -140,6 +141,7 @@ var updateData = [](func(*serverContext, string, []string) Response){
 	getRealName,
 	userJoin,
 	userPart,
+	getNames,
 }
 
 func connectionOpened(context *serverContext, nick string, params []string) Response {
@@ -240,7 +242,6 @@ func userJoin(context *serverContext, nick string, params []string) Response {
 	message := fmt.Sprintf(":%v!%v@%v JOIN %v\r\n", nick, user.user, user.host, params[0])
 
 	channel.members[nick] = member
-
 	for k := range channel.members {
 		context.users[k].channel <- message
 	}
@@ -277,6 +278,13 @@ func userPart(context *serverContext, nick string, params []string) Response {
 	// FIXME: If no users left, delete channel
 
 	return Response{}
+}
+
+func getNames(context *serverContext, nick string, params []string) Response {
+	channelName := params[0]
+	channel, _ := context.channels[channelName]
+
+	return Response{OK, getMemberList(&channel)}
 }
 
 // utility funcs

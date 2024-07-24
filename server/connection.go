@@ -362,13 +362,23 @@ func handleAway(server ServerInfo, state *connectionState, params []string) (res
 
 	return []string{"\r\n"}
 }
+
 func handleNames(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
 	}
+	channelName := params[0]
 
-	return []string{"\r\n"}
+	_, channelMembers := sendCommandToServer(server.commandChan, NAMES, state.nick, params)
+
+	channelState := "="
+	channelMembers = strings.TrimSpace(channelMembers)
+	return []string{
+		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
+		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),
+	}
 }
+
 func handleList(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
 		return errUnregistered(server.name, state.nick)
