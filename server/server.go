@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -289,10 +290,23 @@ func getNames(context *serverContext, nick string, params []string) Response {
 
 // utility funcs
 func getMemberList(c *channelInfo) string {
-	var members strings.Builder
+	type memberData struct {
+		name string
+		mode byte
+	}
+	membersList := []memberData{}
 	for k, v := range c.members {
-		members.WriteByte(v.mode)
-		members.WriteString(k)
+		mode := v.mode
+		membersList = append(membersList, memberData{k, mode})
+	}
+	sort.Slice(membersList, func(first, second int) bool {
+		return membersList[first].name < membersList[second].name
+	})
+
+	var members strings.Builder
+	for _, m := range membersList {
+		members.WriteByte(m.mode)
+		members.WriteString(m.name)
 		members.WriteRune(' ')
 	}
 
