@@ -710,3 +710,42 @@ func TestPart(t *testing.T) {
 		})
 	}
 }
+
+func TestPartErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"ERR_NOSUCHCHANNEL", "PART #foo\r\n", ":bar.example.com 403 creator #foo :No such channel\r\n"},
+		// {"ERR_NOTONCHANNEL", "PART \r\n", ":bar.example.com 401 sender foo :No such nick/channel\r\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client, 1)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client, 4)
+
+				return
+			}
+
+			// Setup
+			creator := newTestConn("creator")
+			writeAndFlush(creator, "JOIN #test,#test2\r\n")
+			discardResponse(creator, 4)
+
+			// User leaves
+			writeAndFlush(creator, tt.input)
+			r, _ := creator.ReadString('\n')
+			assert.Equal(t, tt.expected, r)
+			assert.Zero(t, creator.Reader.Buffered())
+		})
+	}
+}

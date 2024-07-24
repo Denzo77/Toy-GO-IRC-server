@@ -335,7 +335,12 @@ func handlePart(server ServerInfo, state *connectionState, params []string) (res
 		return errUnregistered(server.name, state.nick)
 	}
 
-	sendCommandToServer(server.commandChan, PART, state.nick, params)
+	result, _ := sendCommandToServer(server.commandChan, PART, state.nick, params)
+
+	if result == ERR_NOSUCHCHANNEL {
+		channel := params[0]
+		return []string{fmt.Sprintf(":%v 403 %v %v :No such channel\r\n", server.name, state.nick, channel)}
+	}
 
 	return []string{"\r\n"}
 }

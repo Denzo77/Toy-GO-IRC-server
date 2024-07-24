@@ -63,6 +63,7 @@ type Registration struct {
 const (
 	OK                 = 0
 	ERR_NOSUCHNICKNAME = 401
+	ERR_NOSUCHCHANNEL  = 403
 	ERR_NICKNAMEINUSE  = 433
 )
 
@@ -256,7 +257,11 @@ func userPart(context *serverContext, nick string, params []string) Response {
 	} else {
 		message = fmt.Sprintf(":%v!%v@%v PART %v :%v\r\n", nick, user.user, user.host, params[0], params[1])
 	}
-	channel, _ := context.channels[channelName]
+	channel, present := context.channels[channelName]
+	if !present {
+		return Response{ERR_NOSUCHCHANNEL, ""}
+	}
+
 	for k := range channel.members {
 		context.users[k].channel <- message
 	}
