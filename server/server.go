@@ -174,14 +174,14 @@ func privMsg(context *serverContext, nick string, params []string) Response {
 	switch targetType {
 	case '&', '#', '+', '!':
 		// send to channels
-		_, present := context.channels[target]
+		channel, present := context.channels[target]
 		if !present {
 			return Response{ERR_NOSUCHNICKNAME, ""}
 		}
 
-		// for k := range channel.members {
-		// 	context.users[k].channel <- message
-		// }
+		for k := range channel.members {
+			context.users[k].channel <- message
+		}
 	default:
 		// send to user
 		// Check if nickname already registered

@@ -264,7 +264,7 @@ func TestQuitEndsConnection(t *testing.T) {
 	}
 }
 
-func TestSending(t *testing.T) {
+func TestSendingDMs(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -296,6 +296,52 @@ func TestSending(t *testing.T) {
 			discardResponse(sender, 1)
 
 			response, _ := receiver.ReadString('\n')
+			assert.Equal(t, tt.expected, response)
+		})
+	}
+}
+func TestSendingToChannels(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"PRIVMSG", "PRIVMSG #test :This is a message\r\n", ":sender!sender@pipe PRIVMSG #test :This is a message\r\n"},
+		{"NOTICE", "NOTICE #test :This is a message\r\n", ":sender!sender@pipe NOTICE #test :This is a message\r\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
+
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client, 1)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client, 4)
+				writeAndFlush(client, "JOIN #test\r\n")
+				discardResponse(client, 4)
+
+				return
+			}
+
+			sender := newTestConn("sender")
+			receiver1 := newTestConn("receiver1")
+			receiver2 := newTestConn("receiver2")
+
+			// Discard channel join messages
+			discardResponse(sender, 2)
+			discardResponse(receiver1, 1)
+
+			writeAndFlush(sender, tt.input)
+			discardResponse(sender, 1)
+
+			response, _ := receiver1.ReadString('\n')
+			assert.Equal(t, tt.expected, response)
+
+			response, _ = receiver2.ReadString('\n')
 			assert.Equal(t, tt.expected, response)
 		})
 	}
