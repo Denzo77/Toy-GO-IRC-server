@@ -661,3 +661,39 @@ func TestJoinErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPart(t *testing.T) {
+	server := MakeServer("bar.example.com")
+
+	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+		client, serverConn := makeTestConn()
+		newIrcConnection(server, serverConn)
+		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+		discardResponse(client, 1)
+		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+		discardResponse(client, 4)
+
+		return
+	}
+
+	// Setup
+	creator := newTestConn("creator")
+	writeAndFlush(creator, "JOIN #test\r\n")
+	discardResponse(creator, 4)
+
+	// Another user joins
+	guest := newTestConn("guest")
+	writeAndFlush(guest, "JOIN #test\r\n")
+	discardResponse(guest, 4)
+	discardResponse(creator, 1)
+
+	// User leaves
+	writeAndFlush(guest, "PART #test\r\n")
+	r, _ := creator.ReadString('\n')
+	assert.Equal(t, ":guest!guest@pipe PART #test\r\n", r)
+	assert.Zero(t, creator.Reader.Buffered())
+
+	r, _ = guest.ReadString('\n')
+	assert.Equal(t, ":guest!guest@pipe PART #test\r\n", r)
+	assert.Zero(t, guest.Reader.Buffered())
+}

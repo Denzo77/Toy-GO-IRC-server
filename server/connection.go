@@ -335,6 +335,8 @@ func handlePart(server ServerInfo, state *connectionState, params []string) (res
 		return errUnregistered(server.name, state.nick)
 	}
 
+	sendCommandToServer(server.commandChan, PART, state.nick, params)
+
 	return []string{"\r\n"}
 }
 func handleTopic(server ServerInfo, state *connectionState, params []string) (response []string) {
