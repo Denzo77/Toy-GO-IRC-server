@@ -250,8 +250,12 @@ func userPart(context *serverContext, nick string, params []string) Response {
 	channelName := params[0]
 
 	user, _ := context.users[nick]
-	message := fmt.Sprintf(":%v!%v@%v PART %v\r\n", nick, user.user, user.host, params[0])
-
+	var message string
+	if len(params) == 1 {
+		message = fmt.Sprintf(":%v!%v@%v PART %v\r\n", nick, user.user, user.host, params[0])
+	} else {
+		message = fmt.Sprintf(":%v!%v@%v PART %v :%v\r\n", nick, user.user, user.host, params[0], params[1])
+	}
 	channel, _ := context.channels[channelName]
 	for k := range channel.members {
 		context.users[k].channel <- message
