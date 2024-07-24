@@ -322,13 +322,14 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 
 	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
 
-	channelState := "="
 	channelMembers = strings.TrimSpace(channelMembers)
-	return []string{
+
+	response = []string{
 		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
-		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
-		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),
 	}
+	response = append(response, rplNames(server.name, state.nick, "=", channelName, channelMembers)...)
+
+	return
 }
 func handlePart(server ServerInfo, state *connectionState, params []string) (response []string) {
 	if !isRegistered(*state) {
@@ -371,12 +372,7 @@ func handleNames(server ServerInfo, state *connectionState, params []string) (re
 
 	_, channelMembers := sendCommandToServer(server.commandChan, NAMES, state.nick, params)
 
-	channelState := "="
-	channelMembers = strings.TrimSpace(channelMembers)
-	return []string{
-		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server.name, state.nick, channelState, channelName, channelMembers),
-		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server.name, state.nick, channelName),
-	}
+	return rplNames(server.name, state.nick, "=", channelName, channelMembers)
 }
 
 func handleList(server ServerInfo, state *connectionState, params []string) (response []string) {
@@ -480,6 +476,16 @@ func rplWelcome(server string, nick string, user string, host string) []string {
 		fmt.Sprintf(":%v 003 %v :This server was created %v\r\n", server, nick, creationDate),
 		fmt.Sprintf(":%v 004 %v :%v %v %v %v\r\n", server, nick, server, version, userModes, channelModes),
 	}
+}
+
+func rplNames(server string, nick string, channelState string, channelName string, channelMembers string) []string {
+	channelMembers = strings.TrimSpace(channelMembers)
+
+	return []string{
+		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server, nick, channelState, channelName, channelMembers),
+		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server, nick, channelName),
+	}
+
 }
 
 func errNeedMoreParams(server string, nick string, command string) []string {
