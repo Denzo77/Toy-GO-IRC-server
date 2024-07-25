@@ -290,16 +290,38 @@ func userPart(context *serverContext, nick string, params []string) Response {
 func getNames(context *serverContext, nick string, params []string) Response {
 	responseChan := context.users[nick].channel
 
-	channelName := params[0]
-	channel, present := context.channels[channelName]
-	if !present {
-		responseChan <- fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", context.info.name, nick, channelName)
-		return Response{ERR_NOSUCHCHANNEL, ""}
-	}
+	if len(params) > 0 {
+		channelName := params[0]
+		channel, present := context.channels[channelName]
+		if !present {
+			responseChan <- fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", context.info.name, nick, channelName)
+			return Response{ERR_NOSUCHCHANNEL, ""}
+		}
 
-	channelMembers := getMemberList(&channel)
-	for _, r := range rplNames(context.info.name, nick, "=", channelName, channelMembers) {
-		responseChan <- r
+		channelMembers := getMemberList(&channel)
+		for _, r := range rplNames(context.info.name, nick, "=", channelName, channelMembers) {
+			responseChan <- r
+		}
+	} else {
+		type cI struct {
+			name    string
+			channel channelInfo
+		}
+		channelList := []cI{}
+		for channelName, channel := range context.channels {
+			channelList = append(channelList, cI{channelName, channel})
+		}
+
+		sort.Slice(channelList, func(i, j int) bool {
+			return channelList[i].name < channelList[j].name
+		})
+
+		for _, c := range channelList {
+			channelMembers := strings.TrimSpace(getMemberList(&c.channel))
+			responseChan <- fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", context.info.name, nick, "=", c.name, channelMembers)
+		}
+
+		responseChan <- fmt.Sprintf(":%v 366 %v :End of /NAMES list\r\n", context.info.name, nick)
 	}
 
 	return Response{OK, ""}

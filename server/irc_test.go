@@ -759,9 +759,9 @@ func TestNames(t *testing.T) {
 		input    string
 		expected []string
 	}{
-		{"on single channel", "NAMES #test\r\n", []string{
-			":bar.example.com 353 guest = #test :+creator +guest\r\n",
-			":bar.example.com 366 guest #test :End of /NAMES list\r\n",
+		{"on single channel", "NAMES #test1\r\n", []string{
+			":bar.example.com 353 guest = #test1 :+creator +guest\r\n",
+			":bar.example.com 366 guest #test1 :End of /NAMES list\r\n",
 		}},
 		{"nonexistent channel", "NAMES #foo\r\n", []string{
 			":bar.example.com 366 guest #foo :End of /NAMES list\r\n",
@@ -772,11 +772,11 @@ func TestNames(t *testing.T) {
 		// 	":bar.example.com 353 guest = #test2 :+creator\r\n",
 		// 	":bar.example.com 366 guest #test1,#test2 :End of /NAMES list\r\n",
 		// }},
-		// {"with no args", "NAMES\r\n", []string{
-		// 	":bar.example.com 353 guest = #test1 :+creator +guest\r\n",
-		// 	":bar.example.com 353 guest = #test2 :+creator\r\n",
-		// 	":bar.example.com 366 guest #test1,#test2 :End of /NAMES list\r\n",
-		// }},
+		{"with no args", "NAMES\r\n", []string{
+			":bar.example.com 353 guest = #test1 :+creator +guest\r\n",
+			":bar.example.com 353 guest = #test2 :+creator\r\n",
+			":bar.example.com 366 guest :End of /NAMES list\r\n",
+		}},
 	}
 
 	for _, tt := range tests {
@@ -796,12 +796,14 @@ func TestNames(t *testing.T) {
 
 			// Setup
 			creator := newTestConn("creator")
-			writeAndFlush(creator, "JOIN #test\r\n")
+			writeAndFlush(creator, "JOIN #test1\r\n")
+			discardResponse(creator, 4)
+			writeAndFlush(creator, "JOIN #test2\r\n")
 			discardResponse(creator, 4)
 
 			// Another user joins
 			guest := newTestConn("guest")
-			writeAndFlush(guest, "JOIN #test\r\n")
+			writeAndFlush(guest, "JOIN #test1\r\n")
 			discardResponse(guest, 4)
 			discardResponse(creator, 1)
 
