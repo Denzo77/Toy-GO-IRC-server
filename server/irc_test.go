@@ -707,6 +707,10 @@ func TestPart(t *testing.T) {
 			r, _ = guest.ReadString('\n')
 			assert.Equal(t, tt.expected, r)
 			assert.Zero(t, guest.Reader.Buffered())
+
+			writeAndFlush(creator, "NAMES #test\r\n")
+			r, _ = creator.ReadString('\n')
+			assert.Equal(t, ":bar.example.com 353 creator = #test :+creator\r\n", r)
 		})
 	}
 }
