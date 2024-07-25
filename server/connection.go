@@ -108,8 +108,7 @@ func handleIrcMessage(server ServerInfo, state *connectionState, message string)
 			state.messageChan <- fmt.Sprintf(":%v 421 %v %v :Unknown command\r\n", server.name, nick, command)
 			return
 		}
-
-		respondMultiple(state.messageChan, handler(server, state, params))
+		handler(server, state, params)
 		return
 	}()
 
@@ -118,7 +117,7 @@ func handleIrcMessage(server ServerInfo, state *connectionState, message string)
 
 // Commands
 // Dispatch table
-var ircCommands = map[string](func(ServerInfo, *connectionState, []string) []string){
+var ircCommands = map[string](func(ServerInfo, *connectionState, []string)){
 	"NICK": handleNick,
 	"USER": handleUser,
 	// "QUIT": handleQuit,
@@ -139,63 +138,74 @@ var ircCommands = map[string](func(ServerInfo, *connectionState, []string) []str
 }
 
 // Registers the user with a unique identifier
-func handleNick(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleNick(server ServerInfo, state *connectionState, params []string) {
 	if len(params) < 1 {
 		nick := state.nick
 		if !isRegistered(*state) {
 			nick = "*"
 		}
-		return []string{fmt.Sprintf(":%v 431 %v :No nickname given\r\n", server.name, nick)}
+		state.messageChan <- fmt.Sprintf(":%v 431 %v :No nickname given\r\n", server.name, nick)
+		return
 	}
 
 	if isRegistered(*state) {
 		// 1: already registered
 		err := trySetNick(server, state.nick, params[0])
 		if err != nil {
-			return []string{err.Error()}
+			state.messageChan <- err.Error()
+			return
 		}
 
 		oldNick := state.nick
 		state.nick = params[0]
-		return []string{fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)}
+		state.messageChan <- fmt.Sprintf(":%v NICK %v\r\n", oldNick, state.nick)
 	} else if len(state.user) == 0 {
 		// 2: no user details
 		state.nick = params[0]
-		return []string{"\r\n"}
+		state.messageChan <- "\r\n"
 	} else {
-		return tryRegister(server, state, params[0])
+		response := tryRegister(server, state, params[0])
+		for _, r := range response {
+			state.messageChan <- r
+		}
 	}
 
 }
 
 // Additional data about the user.
-func handleUser(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleUser(server ServerInfo, state *connectionState, params []string) {
 	nick := state.nick
 	if len(nick) == 0 {
 		nick = "*"
 	}
 
 	if len(params) < 4 {
-		return errNeedMoreParams(server.name, nick, "USER")
+		state.messageChan <- errNeedMoreParams(server.name, nick, "USER")
+		return
 	}
 	if len(state.user) > 0 {
-		return []string{fmt.Sprintf(":%v 462 %v :Unauthorized command (already registered)\r\n", server.name, nick)}
+		state.messageChan <- fmt.Sprintf(":%v 462 %v :Unauthorized command (already registered)\r\n", server.name, nick)
+		return
 	}
 
 	state.user = params[0]
 	state.realName = params[3]
 
 	if len(state.nick) == 0 {
-		return []string{"\r\n"}
+		state.messageChan <- "\r\n"
+		return
 	} else {
-		return tryRegister(server, state, nick)
+		for _, r := range tryRegister(server, state, nick) {
+			state.messageChan <- r
+		}
+		return
 	}
 }
 
 // End the session. Should respond and then end the connection.
 func handleQuit(server ServerInfo, state *connectionState, params []string) (response []string, quit bool) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick), false
+		return []string{errUnregistered(server.name, state.nick)}, false
 	}
 
 	sendCommandToServer(server.commandChan, QUIT, state.nick, []string{})
@@ -210,66 +220,82 @@ func handleQuit(server ServerInfo, state *connectionState, params []string) (res
 	return []string{fmt.Sprintf(":%v ERROR :Closing Link: %v %v\r\n", server.name, state.host, message)}, true
 }
 
-func handlePrivmsg(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handlePrivmsg(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 	if len(params) == 0 {
-		return []string{fmt.Sprintf(":%v 411 %v :No recipient given (PRIVMSG)\r\n", server.name, state.nick)}
+		state.messageChan <- fmt.Sprintf(":%v 411 %v :No recipient given (PRIVMSG)\r\n", server.name, state.nick)
+		return
 	}
 	if len(params) == 1 {
-		return []string{fmt.Sprintf(":%v 412 %v :No text to send\r\n", server.name, state.nick)}
+		state.messageChan <- fmt.Sprintf(":%v 412 %v :No text to send\r\n", server.name, state.nick)
+		return
 	}
 
 	message := fmt.Sprintf(":%v!%v@%v PRIVMSG %v :%v\r\n", state.nick, state.user, state.host, params[0], params[1])
 	result, _ := sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
 
 	if result == ERR_NOSUCHNICKNAME {
-		return []string{fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])}
+		state.messageChan <- fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])
+		return
 	}
 
-	return []string{"\r\n"}
+	state.messageChan <- "\r\n"
 }
-func handleNotice(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handleNotice(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		// FIXME: should this error?
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 	if len(params) < 2 {
-		return []string{"\r\n"}
+		state.messageChan <- "\r\n"
+		return
 	}
 
 	message := fmt.Sprintf(":%v!%v@%v NOTICE %v :%v\r\n", state.nick, state.user, state.host, params[0], params[1])
 	sendCommandToServer(server.commandChan, PRIVMSG, state.nick, []string{params[0], message})
-
-	return []string{"\r\n"}
+	state.messageChan <- "\r\n"
 }
-func handlePing(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handlePing(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
-
 	if len(params) < 1 {
-		return errNeedMoreParams(server.name, state.nick, "PING")
+		state.messageChan <- errNeedMoreParams(server.name, state.nick, "PING")
+		return
 	}
 
-	return []string{fmt.Sprintf(":%v PONG %v %v\r\n", server.name, server.name, params[0])}
+	state.messageChan <- fmt.Sprintf(":%v PONG %v %v\r\n", server.name, server.name, params[0])
 }
-func handlePong(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handlePong(server ServerInfo, state *connectionState, params []string) {
 	// TODO: Should we actually do this check?
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
-	return []string{"\r\n"}
+	state.messageChan <- "\r\n"
 }
-func handleMotd(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handleMotd(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
-	return []string{fmt.Sprintf(":%v 422 %v :MOTD not implemented\r\n", server.name, state.nick)}
+
+	state.messageChan <- fmt.Sprintf(":%v 422 %v :MOTD not implemented\r\n", server.name, state.nick)
 }
-func handleLusers(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handleLusers(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 
 	clients, _ := sendCommandToServer(server.commandChan, N_CONNECTIONS, state.nick, params)
@@ -280,111 +306,118 @@ func handleLusers(server ServerInfo, state *connectionState, params []string) (r
 	unknown := clients - users
 	channels := 0
 	// FIXME: Should this be users + unknown + invisible?
-	return []string{
+	response := []string{
 		fmt.Sprintf(":%v 251 %v :There are %v users and %v invisible on %v servers\r\n", server.name, state.nick, users, invisible, servers),
 		fmt.Sprintf(":%v 252 %v %v :operator(s) online\r\n", server.name, state.nick, operators),
 		fmt.Sprintf(":%v 253 %v %v :unknown connection(s)\r\n", server.name, state.nick, unknown),
 		fmt.Sprintf(":%v 254 %v %v :channels formed\r\n", server.name, state.nick, channels),
 		fmt.Sprintf(":%v 255 %v :I have %v clients and %v servers\r\n", server.name, state.nick, clients, servers),
 	}
+	for _, r := range response {
+		state.messageChan <- r
+	}
 }
-func handleWhois(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handleWhois(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 	if len(params) < 1 {
-		return []string{"\r\n"}
+		state.messageChan <- "\r\n"
+		return
 	}
 
 	targetNick := params[0]
 	result, targetHost := sendCommandToServer(server.commandChan, GET_HOST_NAME, state.nick, params[:1])
 	if result == ERR_NOSUCHNICKNAME {
-		return []string{fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])}
+		state.messageChan <- fmt.Sprintf(":%v 401 %v %v :No such nick/channel\r\n", server.name, state.nick, params[0])
+		return
 	}
 	_, targetName := sendCommandToServer(server.commandChan, GET_REAL_NAME, state.nick, params[:1])
 
-	return []string{
+	response := []string{
 		fmt.Sprintf(":%v 311 %v %v %v %v :%v\r\n", server.name, state.nick, targetNick, targetNick, targetHost, targetName),
 		fmt.Sprintf(":%v 312 %v %v %v :Toy server\r\n", server.name, state.nick, targetNick, server.name),
 		fmt.Sprintf(":%v 318 %v %v :End of /WHOIS list\r\n", server.name, state.nick, targetNick),
 	}
+	for _, r := range response {
+		state.messageChan <- r
+	}
 }
 
-func handleJoin(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleJoin(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 	if len(params) < 1 {
-		return errNeedMoreParams(server.name, state.nick, "JOIN")
+		state.messageChan <- errNeedMoreParams(server.name, state.nick, "JOIN")
+		return
 	}
 
 	_, _ = sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
-
-	return
 }
-func handlePart(server ServerInfo, state *connectionState, params []string) (response []string) {
+
+func handlePart(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 	if len(params) < 1 {
-		return errNeedMoreParams(server.name, state.nick, "PART")
+		state.messageChan <- errNeedMoreParams(server.name, state.nick, "PART")
+		return
 	}
 	result, _ := sendCommandToServer(server.commandChan, PART, state.nick, params)
 
 	channel := params[0]
 	if result == ERR_NOSUCHCHANNEL {
-		return []string{fmt.Sprintf(":%v 403 %v %v :No such channel\r\n", server.name, state.nick, channel)}
+		state.messageChan <- fmt.Sprintf(":%v 403 %v %v :No such channel\r\n", server.name, state.nick, channel)
 	} else if result == ERR_NOTONCHANNEL {
-		return []string{fmt.Sprintf(":%v 441 %v %v :You're not on that channel\r\n", server.name, state.nick, channel)}
+		state.messageChan <- fmt.Sprintf(":%v 441 %v %v :You're not on that channel\r\n", server.name, state.nick, channel)
 	}
-
-	return []string{"\r\n"}
-}
-func handleTopic(server ServerInfo, state *connectionState, params []string) (response []string) {
-	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
-	}
-
-	return []string{"\r\n"}
-}
-func handleAway(server ServerInfo, state *connectionState, params []string) (response []string) {
-	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
-	}
-
-	return []string{"\r\n"}
 }
 
-func handleNames(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleTopic(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
+	}
+}
+func handleAway(server ServerInfo, state *connectionState, params []string) {
+	if !isRegistered(*state) {
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
+	}
+}
+
+func handleNames(server ServerInfo, state *connectionState, params []string) {
+	if !isRegistered(*state) {
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
 
 	_, _ = sendCommandToServer(server.commandChan, NAMES, state.nick, params)
-
-	return []string{"\r\n"}
 }
 
-func handleList(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleList(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
-
-	return []string{"\r\n"}
 }
-func handleWho(server ServerInfo, state *connectionState, params []string) (response []string) {
+func handleWho(server ServerInfo, state *connectionState, params []string) {
 	if !isRegistered(*state) {
-		return errUnregistered(server.name, state.nick)
+		state.messageChan <- errUnregistered(server.name, state.nick)
+		return
 	}
-
-	return []string{"\r\n"}
 }
 
-// func handle(server ServerInfo, state *connectionState, params []string) (response []string) {
+// func handle(server ServerInfo, state *connectionState, params []string) {
 // if !isRegistered(*state) {
-// 	return errUnregistered(server.name)
-// }
-// 	return []string{}
+// 		state.messageChan <- errUnregistered(server.name, state.nick)
+// 		return
+// 	}
 // }
 
 // utility functions
@@ -468,10 +501,10 @@ func rplWelcome(server string, nick string, user string, host string) []string {
 	}
 }
 
-func errNeedMoreParams(server string, nick string, command string) []string {
-	return []string{fmt.Sprintf(":%v 461 %v %v :Not enough parameters\r\n", server, nick, command)}
+func errNeedMoreParams(server string, nick string, command string) string {
+	return fmt.Sprintf(":%v 461 %v %v :Not enough parameters\r\n", server, nick, command)
 }
 
-func errUnregistered(server string, nick string) []string {
-	return []string{fmt.Sprintf(":%v 451 %v :You have not registered\r\n", server, nick)}
+func errUnregistered(server string, nick string) string {
+	return fmt.Sprintf(":%v 451 %v :You have not registered\r\n", server, nick)
 }
