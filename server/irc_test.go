@@ -753,40 +753,56 @@ func TestPartErrors(t *testing.T) {
 	}
 }
 
-func TestNamesOnChannel(t *testing.T) {
-	server := MakeServer("bar.example.com")
-
-	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
-		client, serverConn := makeTestConn()
-		newIrcConnection(server, serverConn)
-		writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
-		discardResponse(client, 1)
-		writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
-		discardResponse(client, 4)
-
-		return
+func TestNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{"on single channel", "NAMES #test\r\n", []string{
+			":bar.example.com 353 guest = #test :+creator +guest\r\n",
+			":bar.example.com 366 guest #test :End of /NAMES list\r\n",
+		}},
 	}
 
-	// Setup
-	creator := newTestConn("creator")
-	writeAndFlush(creator, "JOIN #test\r\n")
-	discardResponse(creator, 4)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := MakeServer("bar.example.com")
 
-	// Another user joins
-	guest := newTestConn("guest")
-	writeAndFlush(guest, "JOIN #test\r\n")
-	discardResponse(guest, 4)
-	discardResponse(creator, 1)
+			var newTestConn = func(nick string) (client *bufio.ReadWriter) {
+				client, serverConn := makeTestConn()
+				newIrcConnection(server, serverConn)
+				writeAndFlush(client, fmt.Sprintf("NICK %v\r\n", nick))
+				discardResponse(client, 1)
+				writeAndFlush(client, fmt.Sprintf("USER %v 0 * :Joe Bloggs\r\n", nick))
+				discardResponse(client, 4)
 
-	// Request names
-	writeAndFlush(guest, "NAMES #test\r\n")
+				return
+			}
 
-	// In the form:
-	response, _ := guest.ReadString('\n')
-	assert.Equal(t, ":bar.example.com 353 guest = #test :+creator +guest\r\n", response)
-	assert.Zero(t, creator.Reader.Buffered())
+			// Setup
+			creator := newTestConn("creator")
+			writeAndFlush(creator, "JOIN #test\r\n")
+			discardResponse(creator, 4)
 
-	response, _ = guest.ReadString('\n')
-	assert.Equal(t, ":bar.example.com 366 guest #test :End of /NAMES list\r\n", response)
-	assert.Zero(t, creator.Reader.Buffered())
+			// Another user joins
+			guest := newTestConn("guest")
+			writeAndFlush(guest, "JOIN #test\r\n")
+			discardResponse(guest, 4)
+			discardResponse(creator, 1)
+
+			// Request names
+			writeAndFlush(guest, tt.input)
+
+			// In the form:
+			response := []string{}
+			for _ = range tt.expected {
+				r, _ := guest.ReadString('\n')
+				response = append(response, r)
+			}
+
+			assert.Equal(t, tt.expected, response)
+			assert.Zero(t, creator.Reader.Buffered())
+		})
+	}
 }
