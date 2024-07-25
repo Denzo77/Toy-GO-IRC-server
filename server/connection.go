@@ -318,14 +318,7 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 		return errNeedMoreParams(server.name, state.nick, "JOIN")
 	}
 
-	channelName := params[0]
-
-	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
-
-	response = []string{
-		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
-	}
-	response = append(response, rplNames(server.name, state.nick, "=", channelName, channelMembers)...)
+	_, _ = sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
 
 	return
 }

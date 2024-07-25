@@ -247,7 +247,13 @@ func userJoin(context *serverContext, nick string, params []string) Response {
 		context.users[k].channel <- message
 	}
 
-	return Response{OK, getMemberList(&channel)}
+	channelMembers := getMemberList(&channel)
+	user.channel <- fmt.Sprintf(":%v 332 %v %v :Test\r\n", context.info.name, nick, channelName)
+	for _, r := range rplNames(context.info.name, nick, "=", channelName, channelMembers) {
+		user.channel <- r
+	}
+
+	return Response{OK, ""}
 }
 
 func userPart(context *serverContext, nick string, params []string) Response {
