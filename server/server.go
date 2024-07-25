@@ -298,9 +298,7 @@ func getNames(context *serverContext, nick string, params []string) Response {
 	}
 
 	channelMembers := getMemberList(&channel)
-	response := rplNames(context.info.name, nick, "=", channelName, channelMembers)
-
-	for _, r := range response {
+	for _, r := range rplNames(context.info.name, nick, "=", channelName, channelMembers) {
 		responseChan <- r
 	}
 
