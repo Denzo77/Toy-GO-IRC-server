@@ -763,6 +763,20 @@ func TestNames(t *testing.T) {
 			":bar.example.com 353 guest = #test :+creator +guest\r\n",
 			":bar.example.com 366 guest #test :End of /NAMES list\r\n",
 		}},
+		{"nonexistent channel", "NAMES #foo\r\n", []string{
+			":bar.example.com 366 guest #foo :End of /NAMES list\r\n",
+		}},
+		// TODO: Not implemented
+		// { "on multiple channels", "NAMES #test1,#test2\r\n", []string{
+		// 	":bar.example.com 353 guest = #test1 :+creator +guest\r\n",
+		// 	":bar.example.com 353 guest = #test2 :+creator\r\n",
+		// 	":bar.example.com 366 guest #test1,#test2 :End of /NAMES list\r\n",
+		// }},
+		// {"with no args", "NAMES\r\n", []string{
+		// 	":bar.example.com 353 guest = #test1 :+creator +guest\r\n",
+		// 	":bar.example.com 353 guest = #test2 :+creator\r\n",
+		// 	":bar.example.com 366 guest #test1,#test2 :End of /NAMES list\r\n",
+		// }},
 	}
 
 	for _, tt := range tests {

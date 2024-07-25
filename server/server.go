@@ -282,10 +282,23 @@ func userPart(context *serverContext, nick string, params []string) Response {
 }
 
 func getNames(context *serverContext, nick string, params []string) Response {
-	channelName := params[0]
-	channel, _ := context.channels[channelName]
+	responseChan := context.users[nick].channel
 
-	return Response{OK, getMemberList(&channel)}
+	channelName := params[0]
+	channel, present := context.channels[channelName]
+	if !present {
+		responseChan <- fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", context.info.name, nick, channelName)
+		return Response{ERR_NOSUCHCHANNEL, ""}
+	}
+
+	channelMembers := getMemberList(&channel)
+	response := rplNames(context.info.name, nick, "=", channelName, channelMembers)
+
+	for _, r := range response {
+		responseChan <- r
+	}
+
+	return Response{OK, ""}
 }
 
 // utility funcs
@@ -311,4 +324,14 @@ func getMemberList(c *channelInfo) string {
 	}
 
 	return members.String()
+}
+
+func rplNames(server string, nick string, channelState string, channelName string, channelMembers string) []string {
+	channelMembers = strings.TrimSpace(channelMembers)
+
+	return []string{
+		fmt.Sprintf(":%v 353 %v %v %v :%v\r\n", server, nick, channelState, channelName, channelMembers),
+		fmt.Sprintf(":%v 366 %v %v :End of /NAMES list\r\n", server, nick, channelName),
+	}
+
 }
