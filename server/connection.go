@@ -322,8 +322,6 @@ func handleJoin(server ServerInfo, state *connectionState, params []string) (res
 
 	_, channelMembers := sendCommandToServer(server.commandChan, JOIN, state.nick, params[:1])
 
-	channelMembers = strings.TrimSpace(channelMembers)
-
 	response = []string{
 		fmt.Sprintf(":%v 332 %v %v :Test\r\n", server.name, state.nick, channelName),
 	}
