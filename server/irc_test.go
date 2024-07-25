@@ -753,7 +753,7 @@ func TestPartErrors(t *testing.T) {
 	}
 }
 
-func TestNames(t *testing.T) {
+func TestNamesOnChannel(t *testing.T) {
 	server := MakeServer("bar.example.com")
 
 	var newTestConn = func(nick string) (client *bufio.ReadWriter) {
