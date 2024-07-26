@@ -708,9 +708,22 @@ func TestPart(t *testing.T) {
 			assert.Equal(t, tt.expected, r)
 			assert.Zero(t, guest.Reader.Buffered())
 
+			// Check user has been removed from the channel
 			writeAndFlush(creator, "NAMES #test\r\n")
 			r, _ = creator.ReadString('\n')
 			assert.Equal(t, ":bar.example.com 353 creator = #test :+creator\r\n", r)
+			discardResponse(creator, 1)
+
+			// // Check that channel is removed when empty
+			// writeAndFlush(creator, tt.input)
+			// r, _ = creator.ReadString('\n')
+			// discardResponse(creator, 2)
+
+			// writeAndFlush(creator, "LIST\r\n")
+			// r, _ = creator.ReadString('\n')
+			// assert.Equal(t, ":bar.example.com 353 creator = #test :+creator\r\n", r)
+			// discardResponse(creator, 1)
+
 		})
 	}
 }
