@@ -1,4 +1,6 @@
-Incomplete IRC chat server based on RFC2812.
+Toy IRC server for learning Go.
+
+Partially implements RFC2812.
 
 Useful resources:
 - http://chi.cs.uchicago.edu/chirc/index.html
